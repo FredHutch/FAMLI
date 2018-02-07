@@ -130,9 +130,10 @@ if __name__ == "__main__":
 
         # Process the alignments, reassigning multi-mapped reads
         try:
-            abund = parse_alignment(
+            aligned_reads, deduplicated_reads, abund = parse_alignment(
                 align_fp,
-                error_rate=args.error_rate
+                error_rate=args.error_rate,
+                genetic_code=args.query_gencode
             )
         except:
             exit_and_clean_up(temp_folder)
@@ -161,6 +162,8 @@ if __name__ == "__main__":
             "ref_db_url": args.ref_db,
             "results": abund,
             "total_reads": n_reads,
+            "aligned_reads": aligned_reads,
+            "deduplicated_reads": deduplicated_reads,
             "time_elapsed": time.time() - start_time
         }
         return_results(

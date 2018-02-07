@@ -33,5 +33,12 @@
   h="$(python /usr/famli/lib/test_parse_alignments.py)"
   echo $h
 
-  [[ "$h" =~ "FAMLI" ]]
+  [[ "$h" =~ "PASSED TESTS" ]]
+}
+
+@test "FAMLI error model" {
+  h="$(python /usr/famli/lib/test_error_model_famli.py)"
+  echo $h
+
+  [[ "$h" =~ "PASSED TESTS" ]]
 }
