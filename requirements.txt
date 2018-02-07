@@ -1,0 +1,6 @@
+pandas==0.20.3
+biopython==1.70
+numpy==1.13.1
+scipy==0.19.1
+awscli==1.11.146
+boto3==1.4.7
