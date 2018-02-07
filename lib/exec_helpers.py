@@ -10,14 +10,22 @@ import traceback
 import subprocess
 
 
-def run_cmds(commands, retry=0, catchExcept=False):
+def run_cmds(commands, retry=0, catchExcept=False, stdout=None):
     """Run commands and write out the log, combining STDOUT & STDERR."""
     logging.info("Commands:")
     logging.info(' '.join(commands))
-    p = subprocess.Popen(commands,
-                         stdout=subprocess.PIPE,
-                         stderr=subprocess.STDOUT)
-    stdout, stderr = p.communicate()
+    if stdout is None:
+        p = subprocess.Popen(commands,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT)
+        stdout, stderr = p.communicate()
+    else:
+        with open(stdout, "wt") as fo:
+            p = subprocess.Popen(commands,
+                                 stdout=fo,
+                                 stderr=subprocess.STDOUT)
+            stdout, stderr = p.communicate()
+        stdout = False
     exitcode = p.wait()
     if stdout:
         logging.info("Standard output of subprocess:")

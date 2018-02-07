@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import json
 import logging
 import numpy as np
 from scipy.stats import binom
@@ -141,12 +142,12 @@ def align_reads(read_fp,               # FASTQ file path
             "align",
             "-a",
             "-t",
-            threads,
+            str(threads),
             "-z",
-            query_gencode,
-            ">",
-            align_fp
-        ])
+            str(query_gencode),
+            db_fp,
+            read_fp
+        ], stdout=align_fp)
 
     return align_fp
 
@@ -185,9 +186,6 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
                     length = int(line[2][3:])
                     # Add to the dict
                     ref_length[ref] = length
-            # Stop once we are done with the header
-            elif line[0] != "@":
-                break
 
     # Add every alignment into the error model
     for a in alignments:
