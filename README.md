@@ -38,7 +38,7 @@ sequence that it aligns to, while taking into account the potential for mis-mapp
 random sequencing error. Operationally, this consists of the following steps:
 
 
-  1. Map all reads in amino acid space against a reference database
+  1. Map all input nucleotide reads in amino acid space against a reference database
   2. Use the user-supplied nucleotide error rate and the user-supplied genetic code to
   compute the expected rate of amino acid substitutions due to random nucleotide error
   3. Calculate the total likelihood mass for each reference, which is the sum of the likelihoods
@@ -46,6 +46,8 @@ random sequencing error. Operationally, this consists of the following steps:
   score, the amino acid substitution rate, the length of the sequence, and the binomial distribution)
   4. Assign each read to a single reference, using the total likelihood mass for that reference
   and the computed probability for the single alignment.
+  5. Calculate summary statistics for the coverage and abundance of each reference using the
+  deduplicated set of reads
 
 
 Here are some examples:
@@ -54,11 +56,84 @@ Here are some examples:
   for reference A across the entire sample, then read #1 gets **assigned to reference A**
 
   * If read #1 aligns equally well to reference A and reference B, but there is _equal_ evidence
-  for reference A across the entire sample, then read #1 is **not assigned to any reference** (see assumption 2 above)
+  for reference A across the entire sample, then read #1 is **not assigned to any reference**
+  (see assumption 2 above)
 
-  * If read #1 aligns to reference A with 0 mismatches and reference B with 1 mismatch, but there is _1,000x more_ 
-  evidence for reference B across the entire sample, then read #1 gets **assigned to reference B**
+  * If read #1 aligns to reference A with 0 mismatches and reference B with 1 mismatch, but there
+  is _1,000x more_ evidence for reference B across the entire sample, then read #1 gets
+  **assigned to reference B**
 
-  * If read #1 aligns to reference A with 0 mismatches and reference B with 1 mismatch, but there is _equal_
-  evidence for reference A and reference B across the entire sample, then read #1 gets **assigned to reference A**
+  * If read #1 aligns to reference A with 0 mismatches and reference B with 1 mismatch, but there
+  is _equal_ evidence for reference A and reference B across the entire sample, then read #1 gets
+  **assigned to reference A**
 
+
+### Math
+
+#### Defining the effective amino acid substitution rate
+
+*Terms:*
+  * Amino acid error rate (Eaa)
+  * Nucleotide error rate (Enuc)
+  * Number of possible non-synonymous nucleotide errors (N-nonsyn)
+  * Number of possible nucleotide errors (N-total)
+
+**Eaa = Enuc * 3 * N-nonsyn / N-total**
+
+#### Defining alignment likelihood
+
+Consider a set of *i* nucleotide sequences being aligned against a set of *j* protein reference sequences.
+
+
+*Edit distance (ED)*
+
+The quality of each alignment can be quantified with an alignment score (AS) in which larger
+values indicate a higher quality alignment. The edit distance (ED) for each alignment is calculated as 
+
+ED*ij* = max(AS*i*) - AS*ij*
+
+Where AS*i* is the set of all alignment scores for query *i* and AS*ij* is the alignment score for query
+*i* against reference *j*.
+
+*Likelihood (L)*
+
+Let us consider two types of likelihood, the likelihood that a given query is truly from a given reference
+*given only the evidence from that single query*, and the likelihood that a given query is truly from a 
+given reference *given all of the evidence from all of the queries in a sample.* For the terms of this
+discussion, we will describe the first (likelihood based on the evidence from a single read) as the *weight*
+(W*ij*) for a given assignment, and the second (likelihood based on the evidence from the entire sample) as 
+the *likelihood* (L*ij*) for a given assignment. 
+
+To calculate the weight, we use a binomial distribution to calculate the probability that the observed number
+of amino acid substitutions would occur due to random chance, given a query sequence of a given length and an 
+expected amino acid error rate. Note that this is additive with the probability that a *larger* number of
+substitutions would occur due to random sequencing error. That metric, based on the binomial distribution
+is depicted here as B(LENGTH*i*, AS*ij*, Eaa)
+
+The weight for each alignment is therefore calculated as:
+
+W*ij* = B(LENGTH*i*, AS*ij*, Eaa)
+
+Next, we calculate the total weight for every reference *j*
+
+TOT*j* = sum(W*ij* for all *i*)
+
+Finally, we calculate the likelihood that any individual query *i* is truly derived from a query *j*
+
+L*ij* = W*ij* * TOT*j*
+
+A query is assigned to a single reference sequence when the condition L*ij* == max(L*ij* for all *j*)
+is satisfied for a single query *j*. 
+
+NB: The only cases in which a query can not be assigned to a single reference is the case in which either
+(a) the reference sequence does not contain any unique amino acid sequence, or (b) the sample has not been
+sequenced to sufficient depth to detect any of that unique sequence.
+
+### Implementation
+
+**Aligner**: For alignment of nucleotide sequences against a protein database, we are currently using
+(Paladin)[https://github.com/twestbrookunh/paladin], which is a similar algorithm to BWA-MEM and
+attempts to align the entire read, rather than performing a local alignment (such as BLAST or DIAMOND).
+
+**Error model**: The amino acid error model being used is the binomial distribution, which takes
+into account both the length of the query sequence and the ob

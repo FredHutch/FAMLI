@@ -49,9 +49,6 @@ error_model.add_prob_to_alignments(alignments)
 for a in alignments:
     assert "likelihood" in a
 
-# Likelihoods sum to 1
-assert sum([a["likelihood"] for a in alignments]) == 1
-
 # The likelihood for the first two alignments should be equal, and the highest
 assert alignments[0]["likelihood"] == alignments[1]["likelihood"]
 assert alignments[0]["likelihood"] > alignments[2]["likelihood"]

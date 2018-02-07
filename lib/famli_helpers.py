@@ -93,23 +93,14 @@ class ErrorModelFAMLI:
 
         for a in alignments:
             a["n_mismatch"] = max_score - a["score"]
+            # Must be an integer
             assert a["n_mismatch"] == round(a["n_mismatch"]), a["n_mismatch"]
             a["n_mismatch"] = int(a["n_mismatch"])
 
-
-        likelihood = [
-            self.edit_dist_prob(a["n_mismatch"], a["len"])
-            for a in alignments
-        ]
-
-        # Sum to 1
-        likelihood = np.array(likelihood)
-        likelihood = likelihood / likelihood.sum()
-
-        for ix, a in enumerate(alignments):
-            a["likelihood"] = likelihood[ix]
+        for a in alignments:
+            a["likelihood"] = self.edit_dist_prob(a["n_mismatch"], a["len"])
             # Add to the probability mass for this reference
-            self.ref_prob_mass[a["ref"]] += likelihood[ix]
+            self.ref_prob_mass[a["ref"]] += a["likelihood"]
 
     def calc_max_likelihood(self, alignments):
         """Determine which alignment has the maximum likelihood."""
