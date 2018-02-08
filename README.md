@@ -135,5 +135,50 @@ sequenced to sufficient depth to detect any of that unique sequence.
 (Paladin)[https://github.com/twestbrookunh/paladin], which is a similar algorithm to BWA-MEM and
 attempts to align the entire read, rather than performing a local alignment (such as BLAST or DIAMOND).
 
-**Error model**: The amino acid error model being used is the binomial distribution, which takes
-into account both the length of the query sequence and the ob
+**Alignment score**: The alignment score for each alignment is encoded in the BAM tag field as `AS:i:<INT>`.
+
+**Error model**: The amino acid error model being used is the binomial distribution (`scipy.stats.binom`), which takes
+into account both the length of the query sequence and the expected amino acid substitution rate.
+
+### Wrapper Script
+
+The entire process can be run as a single command with the script `famli.py`. That script encompasses:
+
+  1. Downloading a reference database (if needed)
+  2. Downloading the input data from SRA, AWS S3, or FTP (if needed)
+  3. Aligning the input data (FASTQ) against the reference database
+  4. Parsing the aligned reads
+  5. Assigning the multi-mapped reads in the manner described above
+  6. Computing coverage & depth metrics for each reference
+  7. Writing the output as a single JSON file, either locally or to AWS S3
+
+Example invocation of `famli.py` inside of the docker image for this repo (`famli:latest`):
+
+```
+docker run \
+  -v $PWD/tests:/share \
+  --rm \
+  famli:latest \
+    famli.py \
+      --input /share/example.fastq \
+      --ref-db /share/ \
+      --output-folder /share/ \
+      --temp-folder /share/ \
+      --query-gencode 11 \
+      --error-rate 0.001
+
+```
+
+Running the above command in the base directory for this repo should create an output file
+(`example.fastq.json.gz`) in the `tests/` directory.
+
+
+### Caveats
+
+For the approach described above, we should note that there are situations in which the observed abundance
+of highly abundant references will be inflated in a sample, in cases when there are more lowly abundant 
+protein-coding sequences present that share a significant amount of homology to the dominant sequence. 
+In other words, for two truly present references sharing a large region of exact amino acid identity, the 
+multi-mapping reads from that redundant region will be entirely assigned to the dominant reference, instead
+of being split between the two. That said, the less-abundant reference will still be detected in the output,
+and all of the reads mapping to regions with unique amino acid sequences should still be assigned correctly.

@@ -37,10 +37,6 @@ if __name__ == "__main__":
     parser.add_argument("--overwrite",
                         action="store_true",
                         help="""Overwrite output files. Off by default.""")
-    parser.add_argument("--evalue",
-                        type=float,
-                        default=0.00001,
-                        help="E-value used to filter alignments.")
     parser.add_argument("--error-rate",
                         type=float,
                         default=0.001,
@@ -121,7 +117,6 @@ if __name__ == "__main__":
                 read_fp,               # FASTQ file path
                 db_fp,                 # Local path to DB
                 sample_temp_folder,    # Folder for results
-                evalue=args.evalue,
                 query_gencode=args.query_gencode,
                 threads=args.threads,
             )
