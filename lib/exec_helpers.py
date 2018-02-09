@@ -22,8 +22,8 @@ def run_cmds(commands, retry=0, catchExcept=False, stdout=None):
     else:
         with open(stdout, "wt") as fo:
             p = subprocess.Popen(commands,
-                                 stdout=fo,
-                                 stderr=subprocess.STDOUT)
+                                 stderr=subprocess.PIPE,
+                                 stdout=fo)
             stdout, stderr = p.communicate()
         stdout = False
     exitcode = p.wait()

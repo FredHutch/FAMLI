@@ -124,7 +124,6 @@ class ErrorModelFAMLI:
 def align_reads(read_fp,               # FASTQ file path
                 db_fp,                 # Local path to DB
                 temp_folder,           # Folder for results
-                evalue=0.0001,
                 query_gencode=11,
                 threads=1):
     """Align a set of reads with Paladin."""
@@ -132,7 +131,6 @@ def align_reads(read_fp,               # FASTQ file path
     align_fp = "{}.sam".format(read_fp)
     logging.info("Input reads: {}".format(read_fp))
     logging.info("Reference database: {}".format(db_fp))
-    logging.info("E-value: {}".format(evalue))
     logging.info("Genetic code: {}".format(query_gencode))
     logging.info("Threads: {}".format(threads))
     logging.info("Output: {}".format(align_fp))
@@ -179,7 +177,8 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
             if line[:3] == "@SQ":
                 # Split up the line
                 line = line.rstrip("\n").split("\t")
-                # Reference name is in the first field
+                # Reference name is in the second field
+                assert len(line) == 3, line
                 ref = line[1][3:]
                 # Check if this reference has any alignments
                 if ref in all_refs:
@@ -280,7 +279,7 @@ def parse_alignments_by_query(align_fp):
             start_pos = int(line[3])
 
             # Get the alignment score
-            alignment_score = parse_alignment_score(line[9:])
+            alignment_score = parse_alignment_score(line[11:])
 
             # If this is a new query ID
             if query != last_query:
