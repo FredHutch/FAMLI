@@ -124,9 +124,12 @@ class ErrorModelFAMLI:
 def align_reads(read_fp,               # FASTQ file path
                 db_fp,                 # Local path to DB
                 temp_folder,           # Folder for results
-                query_gencode=11,
-                threads=1):
-    """Align a set of reads with Paladin."""
+                query_gencode=11,      # Genetic code
+                threads=1,             # Threads
+                min_score=20,          # Minimum alignment score
+                blocks=4):             # Memory block size
+
+    """Align a set of reads with DIAMOND."""
 
     align_fp = "{}.sam".format(read_fp)
     logging.info("Input reads: {}".format(read_fp))
@@ -136,16 +139,29 @@ def align_reads(read_fp,               # FASTQ file path
     logging.info("Output: {}".format(align_fp))
 
     run_cmds([
-            "paladin",
-            "align",
-            "-a",
-            "-t",
-            str(threads),
-            "-z",
+            "diamond",
+            "blastx",
+            "--query", read_fp,             # Input FASTQ
+            "--out", align_fp,              # Alignment file
+            "--threads", str(threads),      # Threads
+            "--db", db_fp,                  # Reference database
+            "--outfmt", "6",                # Output format
+            "qseqid", "sseqid",
+            "pident", "length",
+            "mismatch", "gapopen",
+            "qstart", "qend",
+            "sstart", "send",
+            "evalue", "bitscore",
+            "qlen", "slen",
+            "--min-score", str(min_score),  # Minimum alignment score
+            "--query-cover", "50",          # Minimum query coverage
+            "--id", "80",                   # Minimum alignment identity
+            "--max-target-seqs", "0",       # Report all alignments
+            "--block-size", str(blocks),    # Memory block size
+            "--query-gencode",              # Genetic code
             str(query_gencode),
-            db_fp,
-            read_fp
-        ], stdout=align_fp)
+            "--unal", "0",                  # Don't report unaligned reads
+            ])
 
     return align_fp
 

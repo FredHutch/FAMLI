@@ -22,14 +22,13 @@ ADD requirements.txt /usr/famli
 RUN pip install -r /usr/famli/requirements.txt && rm /usr/famli/requirements.txt
 
 
-# Install Paladin
-RUN cd /usr/local && \
-	wget https://github.com/twestbrookunh/paladin/archive/v1.4.1.tar.gz && \
-	tar xzf v1.4.1.tar.gz && \
-	rm v1.4.1.tar.gz && \
-	cd paladin-1.4.1 && \
-	make && \
-    ln -s /usr/local/paladin-1.4.1/paladin /usr/local/bin/
+# Install DIAMOND v0.9.10
+RUN cd /usr/famli && \
+	wget -q https://github.com/bbuchfink/diamond/releases/download/v0.9.10/diamond-linux64.tar.gz && \
+	tar xzf diamond-linux64.tar.gz && \
+	mv diamond /usr/bin/ && \
+	rm diamond-linux64.tar.gz
+
 
 # Install the SRA toolkit
 RUN cd /usr/local/bin && \
