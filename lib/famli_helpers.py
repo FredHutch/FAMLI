@@ -44,10 +44,10 @@ class ErrorModelFAMLI:
         all_codons = list(set(list(permutations('ATCGATCGATCG', 3))))
         assert len(all_codons) == 64
 
-        # The total number of substitutions
-        n_subs = 0
+        # The total number of substitutions at each of the three positions
+        n_subs = [0, 0, 0]
         # The number of non-synonymous substitutions
-        n_nonsyn_subs = 0
+        n_nonsyn_subs = [0, 0, 0]
         for codon1 in all_codons:
             codon1 = ''.join(codon1)
             if codon1 in table.stop_codons:
@@ -62,20 +62,33 @@ class ErrorModelFAMLI:
                 else:
                     aa2 = table.forward_table[codon2]
                 # Check to see if there is a single substitution
-                if sum([c1 == c2 for c1, c2 in zip(codon1, codon2)]) == 2:
-                    n_subs += 1
+                mismatches = [c1 != c2 for c1, c2 in zip(codon1, codon2)]
+                if sum(mismatches) == 1:
+                    # Increment the counter of all nucleotide subs
+                    n_subs[mismatches.index(True)] += 1
                     if aa1 != aa2:
-                        n_nonsyn_subs += 1
+                        # Increment the counter of all non-syn subs
+                        n_nonsyn_subs[mismatches.index(True)] += 1
 
-        nonsyn_rate = n_nonsyn_subs / float(n_subs)
-        msg = "With genetic code {}, the non-synonymous proportion is {}"
-        logging.info(msg.format(genetic_code, nonsyn_rate))
+        # Calculate the non-synonymous rate at each codon position
+        nonsyn_rate = [
+            x / float(y)
+            for x, y in zip(n_nonsyn_subs, n_subs)
+        ]
+        logging.info("The proportion of non-synonymous nucleotides")
+        for ix, v in enumerate(nonsyn_rate):
+            logging.info("Codon {}: {}".format(ix + 1, round(v, 5)))
 
-        # Given the nucleotide error rate, calculate the
-        # effective amino acid error rate
-        self.aa_error_rate = error_rate * 3. * nonsyn_rate
-        logging.info("Nucleotide error rate: {}".format(error_rate))
-        logging.info("Amino acid error rate: {}".format(self.aa_error_rate))
+        # Calculate the effective amino acid substitution rate
+        self.aa_error_rate = 1 - np.prod([
+            1 - (r * error_rate)
+            for r in nonsyn_rate
+        ])
+
+        logging.info("Given a nucleotide error rate of {},".format(
+            round(error_rate, 4)))
+        logging.info("the amino acid error rate is {}.".format(
+            round(self.aa_error_rate, 4)))
 
         # Keep a cache with the proability of AT LEAST {N} subsitutions
         # in a sequence of {LEN} amino acids in length
@@ -100,6 +113,14 @@ class ErrorModelFAMLI:
 
         return self.likelihood_cache[seq_len][n_mismatch]
 
+    def add_references(self, all_refs):
+        """Set the starting abundance for all references."""
+        ref_prop = 1. / len(all_refs)
+        self.ref_abund = {
+            ref: ref_prop
+            for ref in all_refs
+        }
+
     def add_prob_to_alignments(self, alignments, query_ix):
         """Add the relative likelihood metric to a set of alignments."""
         # This is to be run for all alignments BEFORE calculating
@@ -114,215 +135,90 @@ class ErrorModelFAMLI:
             # Set the query name
             self.query_names[query_ix] = a["query"]
 
-        # Adjust the likelihood values to sum to 1
-        likelihood_sum = np.sum([a["likelihood"] for a in alignments])
-        for a in alignments:
-            a["likelihood"] = a["likelihood"] / likelihood_sum
-
-            # Add to the probability mass for this reference
+            # Add the likelihood for this query and reference
             self.psingle[query_ix][a["ref"]] = a["likelihood"]
 
-    def calc_max_likelihood(self, alignments):
-        """Determine which alignment has the maximum likelihood."""
-        # This is to be run AFTER all of the individual alignments
-        # have had their individual proabilities calculated
+    def update_ref_abund(self):
+        """Calculate the estimated abundance per reference."""
+        self.ref_abund = defaultdict(float)
+        for query, ref_abund in self.psingle.items():
+            for ref, abund in ref_abund.items():
+                self.ref_abund[ref] += abund
 
-        # Calculate the weighted likelihood for each
-        weights = [
-            a["likelihood"] * self.ref_prob_mass[a["ref"]]
-            for a in alignments
-        ]
-
-        max_weight = max(weights)
-
-        return [
-            a for ix, a in enumerate(alignments)
-            if weights[ix] == max_weight
-        ]
-
-    def optimize_assignments(self, cutoff=0.05):
+    def optimize_assignments(self, cutoff=0.5, max_prop=0.1):
         """Iteratively optimize the assignments of reads."""
+
+        # Keep track of the total number of alignments that we started with
+        n_input = sum([len(v.values()) for v in self.psingle.values()])
 
         keep_iterating = True
         n_removed = 0
         iterations = 0
+
+        # Recalculate the reference abundance
+        self.update_ref_abund()
+
         while keep_iterating:
             iterations += 1
 
-            print("\n\nITERATION {:,} ({:,} removed)".format(iterations, n_removed))
+            logging.info("ITERATION {:,} ({:,} removed)".format(
+                iterations, n_removed))
             keep_iterating = False
 
-            # Calculate the estimated abundance of each reference
-            ref_abund = defaultdict(float)
-            for query, query_ref_abund in self.psingle.items():
-                for ref, abund in query_ref_abund.items():
-                    ref_abund[ref] += abund
-
-            print(pd.Series(ref_abund).sort_values().tail())
-
-            # Calculate the total likelihood for all queries
-            # as the single probability * reference abundance
-            # ptotal = defaultdict(lambda: defaultdict(float))
-
-            # for query, query_single_probs in self.psingle.items():
-            #     for ref, prob in query_single_probs.items():
-            #         if prob > 0:
-            #             ptotal[query][ref] = prob * ref_abund[ref]
-
-            #     # Divide by the total
-            #     t = sum(ptotal[query].values())
-            #     for ref, prob in ptotal[query].items():
-            #         ptotal[query][ref] = prob / t
-
-            # print(pd.DataFrame({
-            #     query: pd.Series(ptotal[query]).sort_values().describe()
-            #     for query in ptotal.keys()
-            # }).T.describe())
-
-            # # Start with the lowest likelyhood and iterate upwards
-            # all_probs = sorted(list(set([
-            #     prob
-            #     for query_probs in ptotal.values()
-            #     for prob in query_probs.values()
-            # ])))
-
-            # # Check to see if any of the query - references meet the criteria
-            # # and if so, remove it from self.psingle
-            # lowest_removed = None
-            # highest_removed = None
-
-            # assigned = defaultdict(int)
-            # for query, query_total_probs in ptotal.items():
-            #     for ref, p in query_total_probs.items():
-            #         if round(p, 2) == 1.00:
-            #             assigned[ref] += 1
-
-            # assigned = pd.Series(assigned)
-            # assigned.sort_values(ascending=False, inplace=True)
-            # print(assigned.head())
-
-            # Go through the queries and remove the aggregate set of alignments
-            # that fall below the cutoff
-
+            # Calculate the likelihood for every query,
+            # given the alignment likelihood and the reference abundance
             for query, ref_prob in self.psingle.items():
 
                 # Calculate the reference probability based on the total sample
                 ptotal = pd.Series({
-                    ref: prob * ref_abund[ref]
+                    ref: prob * self.ref_abund[ref]
                     for ref, prob in ref_prob.items()
                 }).sort_values()
 
                 # Divide by the sum
                 ptotal = ptotal / ptotal.sum()
 
-                if query == 2:
-                    print(self.query_names[query])
-                    print(ptotal)
+                # Filter out alignments for which the aggregate probability is
+                # below the cuttoff, and also don't remove more than 10% of the
+                # alignments (rounding up to the nearest integer)
 
-                # Calculate the aggregate probabilty
-                
-                for ref, agg_prop in ptotal.cumsum()[:ceil(ptotal.shape[0] / float(5))].items():
+                # Maximum number of alignments to consider for removal
+                max_to_consider = ceil(ptotal.shape[0] * max_prop)
+
+                # Iterate through each reference for this query
+                for ref, agg_prop in ptotal.cumsum()[:max_to_consider].items():
                     # If the aggregate probability is below the cutoff
                     if agg_prop <= cutoff:
-                        # Disregard the likelihood of this reference
+                        # Remove the information for this alignment
                         del self.psingle[query][ref]
                         n_removed += 1
                         keep_iterating = True
-                        t = sum(self.psingle[query].values())
-                        self.psingle[query] = {k: v / t for k, v in self.psingle[query].items()}
 
-            # for least_likely in np.arange(0, cutoff, cutoff / 100.):
-            #     # If the least likely is above the cutoff, skip
-            #     if least_likely == 0:
-            #         continue
-
-            #     for query, query_total_probs in ptotal.items():
-            #         assert round(sum(query_total_probs.values()), 2) == 1.00, sum(query_total_probs.values())
-
-            #         # If everything is the least likely, skip
-            #         if all([
-            #             p <= least_likely
-            #             for p in query_total_probs.values()
-            #         ]):
-            #             continue
-
-            #         x = False
-            #         # Remove the least likely references
-            #         for ref, p in query_total_probs.items():
-            #             if p <= least_likely:
-            #                 # print("Removing {} @ {}".format(ref, p))
-            #                 keep_iterating = True
-            #                 self.psingle[query][ref] = 0
-            #                 n_removed += 1
-            #                 x = True
-            #         if x:
-            #             self.psingle[query] = {
-            #                 k: v / sum(self.psingle[query].values())
-            #                 for k, v in self.psingle[query].items()
-            #             }
-
-            #     # If any references were removed, recalculate ptotal
-            #     if keep_iterating:
-            #         # assert lowest_removed is not None
-            #         # assert highest_removed >= lowest_removed
-            #         # if highest_removed > lowest_removed * 2:
-            #         #     break
-            #         break
-
-        # Calculate the estimated abundance of each reference
-        ref_abund = defaultdict(float)
-        for query, query_ref_abund in self.psingle.items():
-            for ref, abund in query_ref_abund.items():
-                ref_abund[ref] += abund
+            # Recalculate the reference abundance
+            self.update_ref_abund()
 
         # Loop through the reads
         final_counts = defaultdict(int)
-        assignments = {}
+        self.assignments = {}
         for query, query_ref_abund in self.psingle.items():
-            # Calculate the total probability
-            # single probability * reference abundance
-            ptotal = {
-                ref: ref_single_prob * ref_abund[ref]
-                for ref, ref_single_prob in query_ref_abund.items()
-                if ref_single_prob > 0
-            }
-            # Divide by the total
-            t = sum(ptotal.values())
+            # If there is only a single alignment left, assign the read
+            if len(query_ref_abund) == 1:
+                for ref in query_ref_abund.keys():
+                    final_counts[ref] += 1
 
-            ptotal = {
-                k: v / t
-                for k, v in ptotal.items()
-            }
-
-            # print(query, len(query_ref_abund), len(ptotal))
-            if len(ptotal) == 1:
-                final_counts[list(ptotal.keys())[0]] += 1
-
-                assignments[query] = list(ptotal.keys())[0]
-            else:
-                print(pd.Series(ptotal).sort_values(ascending=False))
+                    self.assignments[query] = ref
 
         final_counts = pd.Series(final_counts)
 
-        for query, assignment in assignments.items():
-            if final_counts[assignment] <= 5:
-                print(query, assignment)
-
-        print("\n\nIterations: {:,}".format(iterations))
-        print("\n\nInput: {:,}".format(sum([len(v.values()) for v in self.psingle.values()])))
-        print("\n\nRemoved: {:,}".format(n_removed))
-        print("\n\nOutput: {:,}".format(sum([sum([x > 0 for x in v.values()]) for v in self.psingle.values()])))
-        print("\n\nDuplicated: {:,}".format(sum([sum([x > 0 for x in v.values()]) > 1 for v in self.psingle.values()])))
-        print("\n\nDeduplicated: {:,}".format(sum([sum([x > 0 for x in v.values()]) == 1 for v in self.psingle.values()])))
-        print("\n\nUnique references: {}".format(final_counts.shape[0]))
-        print(final_counts.sort_values(ascending=False))
-
-        # print("\n".join(list(set([
-        #     ref
-        #     for query, query_probs in self.psingle.items()
-        #     for ref, ref_prob in query_probs.items()
-        #     if ref_prob > 0
-        # ]))))
+        logging.info("Iterations: {:,}".format(iterations))
+        logging.info("Input: {:,}".format(n_input))
+        logging.info("Removed: {:,}".format(n_removed))
+        logging.info("Duplicated: {:,}".format(
+            len(self.psingle) - final_counts.sum()))
+        logging.info("Deduplicated: {:,}".format(final_counts.sum()))
+        logging.info("Unique references: {}".format(final_counts.shape[0]))
+        for ref, count in final_counts.items():
+            logging.info("{}: {:,}".format(ref, count))
 
 
 def align_reads(read_fp,               # FASTQ file path
@@ -361,15 +257,8 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
     error_model = ErrorModelFAMLI(error_rate, genetic_code=genetic_code)
 
     # Read over the file once to get all of the alignments
-    # Group the alignments by query sequence
+    # This will group the alignments by query sequence
     alignments = [a for a in parse_alignments_by_query(align_fp)]
-
-    # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-    # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-    # ONLY USE A FEW ALIGNMENTS
-    # alignments = alignments[:200]
-    # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-    # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
     # Keep track of the total set of reference with any alignments
     all_refs = set([
@@ -377,6 +266,9 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
         for query in alignments
         for a in query
     ])
+
+    # Add the references to the error model
+    error_model.add_references(list(all_refs))
 
     # Length of each reference sequence
     ref_length = {}
@@ -397,16 +289,16 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
                     # Add to the dict
                     ref_length[ref] = length
 
-    # Add every alignment into the error model
+    # Add a "likelihood" to every alignment
+    # This is the likelihood that a single alignment is due to
+    # sequencing error
     for query_ix, a in enumerate(alignments):
         error_model.add_prob_to_alignments(a, query_ix)
 
     # Optimize the read assignments, iteratively calculating the
-    # total reference abunance and removing potential alignments
+    # total reference abundance and removing potential alignments
     # that fall below the specified level of likelihood
-    error_model.optimize_assignments(cutoff=0.5)
-
-    return None, None, None
+    error_model.optimize_assignments(cutoff=0.5, max_prop=0.1)
 
     # Keep track of the number of reads and coverage across each reference
     # Keep track of the RAW stats, as well as the deduplicated alignments
@@ -422,7 +314,7 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
 
     # Now go over the alignments again and reassign each read
     # to the most likely reference
-    for query in alignments:
+    for query_ix, query in enumerate(alignments):
         total_reads += 1
         # Add to the raw abundances
         for a in query:
@@ -439,23 +331,24 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
             end = a["pos"] - 1 + a["len"]
             raw_cov[a["ref"]][start:end] += 1
 
-        # Get the most likely alignment for this query
-        ml_alignments = error_model.calc_max_likelihood(query)
+        # Get the deduplicated reference for this query
+        ref = error_model.assignments.get(query_ix)
 
         # Skip any reads that cannot be deduplicated
-        assert len(ml_alignments) > 0
-        if len(ml_alignments) == 1:
-            deduplicated_reads += 1
+        if ref is None:
+            continue
 
-            a = ml_alignments[0]
+        deduplicated_reads += 1
 
-            # Increment the read count
-            final_reads[a["ref"]] += 1
+        a = [a for a in query if a["ref"] == ref]
 
-            # Add to the final coverage metric
-            start = a["pos"] - 1
-            end = a["pos"] - 1 + a["len"]
-            final_cov[a["ref"]][start:end] += 1
+        # Increment the read count
+        final_reads[a["ref"]] += 1
+
+        # Add to the final coverage metric
+        start = a["pos"] - 1
+        end = a["pos"] - 1 + a["len"]
+        final_cov[a["ref"]][start:end] += 1
 
     # Now calculate summary statistics for each reference
     output = [{
