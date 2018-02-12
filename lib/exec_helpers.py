@@ -50,6 +50,7 @@ def run_cmds(commands, retry=0, catchExcept=False, stdout=None):
 
 def get_reference_database(ref_db, temp_folder):
     """Get a reference database folder."""
+    assert ref_db.endswith('.dmnd'), "Ref DB must be *.dmnd ({})".format(ref_db)
 
     # Get files from AWS S3
     if ref_db.startswith('s3://'):
@@ -58,7 +59,7 @@ def get_reference_database(ref_db, temp_folder):
         # Save the database to the local temp folder
         local_fp = os.path.join(
             temp_folder,
-            ref_db.rstrip("/").split('/')[-1] + "/"
+            ref_db.split('/')[-1]
         )
 
         assert os.path.exists(local_fp) is False
@@ -67,7 +68,7 @@ def get_reference_database(ref_db, temp_folder):
         run_cmds([
             'aws',
             's3',
-            'sync',
+            'cp',
             '--quiet',
             '--sse',
             'AES256',
@@ -75,27 +76,15 @@ def get_reference_database(ref_db, temp_folder):
             local_fp
         ])
 
-        # Look for the Paladin database within the folder
-        for f in os.listdir(local_fp):
-            if f.endswith(".pro"):
-                return os.path.join(local_fp, f.replace(".pro", ""))
-
         return local_fp
 
     else:
         # Treat the input as a local path
         logging.info("Getting reference database from local path: " + ref_db)
-        # If the path is a folder, look for the Paladin database within it
-        if os.path.isdir(ref_db):
-            for f in os.listdir(ref_db):
-                if f.endswith(".pro"):
-                    return os.path.join(ref_db, f.replace(".pro", ""))
-        else:
-            # If not, it should be the prefix for the database
-            msg = "Please provide Paladin database prefix"
-            assert os.path.exists(ref_db + ".pro"), msg
 
-            return ref_db
+        assert os.path.exists(ref_db)
+
+        return ref_db
 
 
 def return_results(out, read_prefix, output_folder, temp_folder):

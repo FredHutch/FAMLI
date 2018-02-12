@@ -17,10 +17,9 @@
   [[ "$v" =~ "7.47.0" ]]
 }
 
-@test "Make sure Paladin is in the PATH" {
-  h="$(paladin version 2>&1 || echo 'done')"
-
-  [[ "$h" =~ "Version: 1.4.1" ]]
+@test "DIAMOND v0.9.10" {
+  v="$(diamond --version)"
+  [[ "$v" =~ "0.9.10" ]]
 }
 
 @test "Make sure the run script is in the PATH" {

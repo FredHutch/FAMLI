@@ -125,7 +125,9 @@ def align_reads(read_fp,               # FASTQ file path
                 db_fp,                 # Local path to DB
                 temp_folder,           # Folder for results
                 query_gencode=11,
-                threads=1):
+                threads=1,
+                evalue=10,
+                blocks=4):
     """Align a set of reads with Paladin."""
 
     align_fp = "{}.sam".format(read_fp)
@@ -136,16 +138,29 @@ def align_reads(read_fp,               # FASTQ file path
     logging.info("Output: {}".format(align_fp))
 
     run_cmds([
-            "paladin",
-            "align",
-            "-a",
-            "-t",
+            "diamond",
+            "blastx",
+            "--threads",
             str(threads),
-            "-z",
-            str(query_gencode),
+            "--query",
+            read_fp,
+            "--db",
             db_fp,
-            read_fp
-        ], stdout=align_fp)
+            "--outfmt",
+            "6",
+            "qseqid", "sseqid", "pident", "length", "mismatch",
+            "gapopen", "qstart", "qend", "sstart", "send",
+            "evalue", "bitscore", "qlen", "slen",
+            "--out",
+            align_fp,
+            "--top",
+            "0",
+            "--evalue",
+            str(evalue),
+            "-b",
+            str(blocks),
+            "--query-gencode",
+            str(query_gencode)])
 
     return align_fp
 

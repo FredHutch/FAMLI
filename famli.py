@@ -41,10 +41,19 @@ if __name__ == "__main__":
                         type=float,
                         default=0.001,
                         help="Expected per-base sequencing error rate.")
+    parser.add_argument("--evalue",
+                        type=float,
+                        default=10,
+                        help="E-value used to filter alignments.")
+    parser.add_argument("--blocks",
+                        type=int,
+                        default=5,
+                        help="""Number of blocks used when aligning.
+                              Value relates to the amount of memory used.""")
     parser.add_argument("--query-gencode",
                         type=int,
                         default=11,
-                        help="Genetic code used to translate nucleotide reads.")
+                        help="Genetic code used to translate nucleotides.")
     parser.add_argument("--threads",
                         type=int,
                         default=16,
@@ -119,6 +128,8 @@ if __name__ == "__main__":
                 sample_temp_folder,    # Folder for results
                 query_gencode=args.query_gencode,
                 threads=args.threads,
+                evalue=args.evalue,
+                blocks=args.blocks,
             )
         except:
             exit_and_clean_up(temp_folder)
