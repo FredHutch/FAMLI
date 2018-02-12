@@ -2,10 +2,12 @@
 
 import json
 import logging
+import pandas as pd
 import numpy as np
+from math import ceil
 from scipy.stats import binom
 from Bio.Data import CodonTable
-from exec_helpers import run_cmds
+from .exec_helpers import run_cmds
 from itertools import permutations
 from collections import defaultdict
 
@@ -16,8 +18,24 @@ class ErrorModelFAMLI:
     def __init__(self, error_rate, genetic_code=11):
         """For the genetic code, calculate the proportion of non-syn errors."""
 
-        # Keep track of the total probability mass for each reference
-        self.ref_prob_mass = defaultdict(float)
+        # The likelihood that a given read is truly from a given reference,
+        # given only the information from a single assignment, is defined
+        # by the number of mismatches and the sequence length (using the
+        # binomial)
+
+        # The likelihood that a given read is truly from a given reference,
+        # given all of the information we have access to about the reference
+        # that the read _could_ align to is defined as the likelihood due to
+        # error, divided by the sum of the likelihood that it is truly from any
+        # other reference due to random sequencing error
+
+        # Keep track of the likelihood that any single read is truly from a
+        # given reference with the dict of dicts, psingle
+
+        self.psingle = defaultdict(lambda: defaultdict(float))
+
+        # Keep track of the names of each input
+        self.query_names = {}
 
         # For this genetic code, determine the proportion of nucleotide
         # substitutions that result in a change in the encoded amino acid
@@ -26,10 +44,10 @@ class ErrorModelFAMLI:
         all_codons = list(set(list(permutations('ATCGATCGATCG', 3))))
         assert len(all_codons) == 64
 
-        # The total number of substitutions
-        n_subs = 0
+        # The total number of substitutions at each of the three positions
+        n_subs = [0, 0, 0]
         # The number of non-synonymous substitutions
-        n_nonsyn_subs = 0
+        n_nonsyn_subs = [0, 0, 0]
         for codon1 in all_codons:
             codon1 = ''.join(codon1)
             if codon1 in table.stop_codons:
@@ -44,20 +62,33 @@ class ErrorModelFAMLI:
                 else:
                     aa2 = table.forward_table[codon2]
                 # Check to see if there is a single substitution
-                if sum([c1 == c2 for c1, c2 in zip(codon1, codon2)]) == 2:
-                    n_subs += 1
+                mismatches = [c1 != c2 for c1, c2 in zip(codon1, codon2)]
+                if sum(mismatches) == 1:
+                    # Increment the counter of all nucleotide subs
+                    n_subs[mismatches.index(True)] += 1
                     if aa1 != aa2:
-                        n_nonsyn_subs += 1
+                        # Increment the counter of all non-syn subs
+                        n_nonsyn_subs[mismatches.index(True)] += 1
 
-        nonsyn_rate = n_nonsyn_subs / float(n_subs)
-        msg = "With genetic code {}, the non-synonymous proportion is {}"
-        logging.info(msg.format(genetic_code, nonsyn_rate))
+        # Calculate the non-synonymous rate at each codon position
+        nonsyn_rate = [
+            x / float(y)
+            for x, y in zip(n_nonsyn_subs, n_subs)
+        ]
+        logging.info("The proportion of non-synonymous nucleotides")
+        for ix, v in enumerate(nonsyn_rate):
+            logging.info("Codon {}: {}".format(ix + 1, round(v, 5)))
 
-        # Given the nucleotide error rate, calculate the
-        # effective amino acid error rate
-        self.aa_error_rate = error_rate * 3. * nonsyn_rate
-        logging.info("Nucleotide error rate: {}".format(error_rate))
-        logging.info("Amino acid error rate: {}".format(self.aa_error_rate))
+        # Calculate the effective amino acid substitution rate
+        self.aa_error_rate = 1 - np.prod([
+            1 - (r * error_rate)
+            for r in nonsyn_rate
+        ])
+
+        logging.info("Given a nucleotide error rate of {},".format(
+            round(error_rate, 4)))
+        logging.info("the amino acid error rate is {}.".format(
+            round(self.aa_error_rate, 4)))
 
         # Keep a cache with the proability of AT LEAST {N} subsitutions
         # in a sequence of {LEN} amino acids in length
@@ -82,7 +113,15 @@ class ErrorModelFAMLI:
 
         return self.likelihood_cache[seq_len][n_mismatch]
 
-    def add_prob_to_alignments(self, alignments):
+    def add_references(self, all_refs):
+        """Set the starting abundance for all references."""
+        ref_prop = 1. / len(all_refs)
+        self.ref_abund = {
+            ref: ref_prop
+            for ref in all_refs
+        }
+
+    def add_prob_to_alignments(self, alignments, query_ix):
         """Add the relative likelihood metric to a set of alignments."""
         # This is to be run for all alignments BEFORE calculating
         # the maximum likelihood for any individual alignment
@@ -90,35 +129,96 @@ class ErrorModelFAMLI:
         # mass for each reference, which is used to calculate the
         # maximum likelihood in the function below
 
-        max_score = max([a["score"] for a in alignments])
-
-        for a in alignments:
-            a["n_mismatch"] = max_score - a["score"]
-            # Must be an integer
-            assert a["n_mismatch"] == round(a["n_mismatch"]), a["n_mismatch"]
-            a["n_mismatch"] = int(a["n_mismatch"])
-
         for a in alignments:
             a["likelihood"] = self.edit_dist_prob(a["n_mismatch"], a["len"])
-            # Add to the probability mass for this reference
-            self.ref_prob_mass[a["ref"]] += a["likelihood"]
 
-    def calc_max_likelihood(self, alignments):
-        """Determine which alignment has the maximum likelihood."""
-        # This is to be run AFTER all of the individual alignments
-        # have had their individual proabilities calculated
+            # Set the query name
+            self.query_names[query_ix] = a["query"]
 
-        # Calculate the weighted likelihood for each
-        weights = [
-            a["likelihood"] * self.ref_prob_mass[a["ref"]]
-            for a in alignments
-        ]
-        max_weight = max(weights)
+            # Add the likelihood for this query and reference
+            self.psingle[query_ix][a["ref"]] = a["likelihood"]
 
-        return [
-            a for ix, a in enumerate(alignments)
-            if weights[ix] == max_weight
-        ]
+    def update_ref_abund(self):
+        """Calculate the estimated abundance per reference."""
+        self.ref_abund = defaultdict(float)
+        for query, ref_abund in self.psingle.items():
+            for ref, abund in ref_abund.items():
+                self.ref_abund[ref] += abund
+
+    def optimize_assignments(self, cutoff=0.5, max_prop=0.1):
+        """Iteratively optimize the assignments of reads."""
+
+        # Keep track of the total number of alignments that we started with
+        n_input = sum([len(v.values()) for v in self.psingle.values()])
+
+        keep_iterating = True
+        n_removed = 0
+        iterations = 0
+
+        # Recalculate the reference abundance
+        self.update_ref_abund()
+
+        while keep_iterating:
+            iterations += 1
+
+            logging.info("ITERATION {:,} ({:,} removed)".format(
+                iterations, n_removed))
+            keep_iterating = False
+
+            # Calculate the likelihood for every query,
+            # given the alignment likelihood and the reference abundance
+            for query, ref_prob in self.psingle.items():
+
+                # Calculate the reference probability based on the total sample
+                ptotal = pd.Series({
+                    ref: prob * self.ref_abund[ref]
+                    for ref, prob in ref_prob.items()
+                }).sort_values()
+
+                # Divide by the sum
+                ptotal = ptotal / ptotal.sum()
+
+                # Filter out alignments for which the aggregate probability is
+                # below the cuttoff, and also don't remove more than 10% of the
+                # alignments (rounding up to the nearest integer)
+
+                # Maximum number of alignments to consider for removal
+                max_to_consider = ceil(ptotal.shape[0] * max_prop)
+
+                # Iterate through each reference for this query
+                for ref, agg_prop in ptotal.cumsum()[:max_to_consider].items():
+                    # If the aggregate probability is below the cutoff
+                    if agg_prop <= cutoff:
+                        # Remove the information for this alignment
+                        del self.psingle[query][ref]
+                        n_removed += 1
+                        keep_iterating = True
+
+            # Recalculate the reference abundance
+            self.update_ref_abund()
+
+        # Loop through the reads
+        final_counts = defaultdict(int)
+        self.assignments = {}
+        for query, query_ref_abund in self.psingle.items():
+            # If there is only a single alignment left, assign the read
+            if len(query_ref_abund) == 1:
+                for ref in query_ref_abund.keys():
+                    final_counts[ref] += 1
+
+                    self.assignments[query] = ref
+
+        final_counts = pd.Series(final_counts)
+
+        logging.info("Iterations: {:,}".format(iterations))
+        logging.info("Input: {:,}".format(n_input))
+        logging.info("Removed: {:,}".format(n_removed))
+        logging.info("Duplicated: {:,}".format(
+            len(self.psingle) - final_counts.sum()))
+        logging.info("Deduplicated: {:,}".format(final_counts.sum()))
+        logging.info("Unique references: {}".format(final_counts.shape[0]))
+        for ref, count in final_counts.items():
+            logging.info("{}: {:,}".format(ref, count))
 
 
 def align_reads(read_fp,               # FASTQ file path
@@ -173,7 +273,7 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
     error_model = ErrorModelFAMLI(error_rate, genetic_code=genetic_code)
 
     # Read over the file once to get all of the alignments
-    # Group the alignments by query sequence
+    # This will group the alignments by query sequence
     alignments = [a for a in parse_alignments_by_query(align_fp)]
 
     # Keep track of the total set of reference with any alignments
@@ -182,6 +282,9 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
         for query in alignments
         for a in query
     ])
+
+    # Add the references to the error model
+    error_model.add_references(list(all_refs))
 
     # Length of each reference sequence
     ref_length = {}
@@ -202,9 +305,16 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
                     # Add to the dict
                     ref_length[ref] = length
 
-    # Add every alignment into the error model
-    for a in alignments:
-        error_model.add_prob_to_alignments(a)
+    # Add a "likelihood" to every alignment
+    # This is the likelihood that a single alignment is due to
+    # sequencing error
+    for query_ix, a in enumerate(alignments):
+        error_model.add_prob_to_alignments(a, query_ix)
+
+    # Optimize the read assignments, iteratively calculating the
+    # total reference abundance and removing potential alignments
+    # that fall below the specified level of likelihood
+    error_model.optimize_assignments(cutoff=0.5, max_prop=0.1)
 
     # Keep track of the number of reads and coverage across each reference
     # Keep track of the RAW stats, as well as the deduplicated alignments
@@ -220,7 +330,7 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
 
     # Now go over the alignments again and reassign each read
     # to the most likely reference
-    for query in alignments:
+    for query_ix, query in enumerate(alignments):
         total_reads += 1
         # Add to the raw abundances
         for a in query:
@@ -237,23 +347,24 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
             end = a["pos"] - 1 + a["len"]
             raw_cov[a["ref"]][start:end] += 1
 
-        # Get the most likely alignment for this query
-        ml_alignments = error_model.calc_max_likelihood(query)
+        # Get the deduplicated reference for this query
+        ref = error_model.assignments.get(query_ix)
 
         # Skip any reads that cannot be deduplicated
-        assert len(ml_alignments) > 0
-        if len(ml_alignments) == 1:
-            deduplicated_reads += 1
+        if ref is None:
+            continue
 
-            a = ml_alignments[0]
+        deduplicated_reads += 1
 
-            # Increment the read count
-            final_reads[a["ref"]] += 1
+        a = [a for a in query if a["ref"] == ref]
 
-            # Add to the final coverage metric
-            start = a["pos"] - 1
-            end = a["pos"] - 1 + a["len"]
-            final_cov[a["ref"]][start:end] += 1
+        # Increment the read count
+        final_reads[a["ref"]] += 1
+
+        # Add to the final coverage metric
+        start = a["pos"] - 1
+        end = a["pos"] - 1 + a["len"]
+        final_cov[a["ref"]][start:end] += 1
 
     # Now calculate summary statistics for each reference
     output = [{
@@ -295,7 +406,7 @@ def parse_alignments_by_query(align_fp):
             start_pos = int(line[3])
 
             # Get the alignment score
-            alignment_score = parse_alignment_score(line[11:])
+            n_mismatch = parse_mismatch_tag(line[11:])
 
             # If this is a new query ID
             if query != last_query:
@@ -316,7 +427,7 @@ def parse_alignments_by_query(align_fp):
                 "ref": ref,
                 "pos": start_pos,
                 "len": query_len,
-                "score": alignment_score
+                "n_mismatch": n_mismatch
             })
 
     # If there is data for the last query, yield it
@@ -329,3 +440,10 @@ def parse_alignment_score(tags):
     for t in tags:
         if t[:2] == "AS":
             return float(t[5:])
+
+
+def parse_mismatch_tag(tags):
+    """Parse the alignment score from a set of SAM tags."""
+    for t in tags:
+        if t[:2] == "NM":
+            return int(t[5:])
