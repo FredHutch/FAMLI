@@ -314,10 +314,10 @@ def parse_alignment(align_fp, QSEQID_i = 0, SSEQID_i = 1, SLEN_i  = 13, BITSCORE
         query = line_list[QSEQID_i]
         query_set.add(query)
         subject = line_list[SSEQID_i]
-        subject_query_coverage[subject][query]=(int(line_list[QSTART_i]), int(line_list[QEND_i]))
-        subject_len[subject] = int(line_list[SLEN_i])
-        
-    logging.info("Completed parsing for coverage {} subjects and {} queries".format(len(subject_len), len(query_set)))
+        subject_query_coverage[subject][query]=(int(line_list[SSTART_i]), int(line_list[SEND_i]))
+        subject_len[subject] = int(line_list[SLEN_i])        
+
+    logging.info("Completed parsing for coverage {} subjects and {} queries".format(len(subject_query_coverage), len(query_set)))
 
     # Now we create coverage-o-grams for each subject, considering how it COULD be covered. Reject those for which the coverage is uneven enough to be implausible
     subjects_below_cutoff = set()
@@ -332,10 +332,8 @@ def parse_alignment(align_fp, QSEQID_i = 0, SSEQID_i = 1, SLEN_i  = 13, BITSCORE
         # Trim the 5' and 3' ends of the subject. Due to overhangs, they tend to be less covered. 
         subject_could_coverage_trimmed = subject_could_coverage[STRIM_5:-STRIM_3]
         # Using the trimmed coverage-o-gram, if the STD / mean of coverage is LESS than a threshold (empirically set to 0.33), it is a subject to keep
-        if np.std(subject_could_coverage_trimmed) / np.mean(subject_could_coverage_trimmed) <= SD_MEAN_CUTOFF:
+        if (np.std(subject_could_coverage_trimmed) / np.mean(subject_could_coverage_trimmed)) <= SD_MEAN_CUTOFF:
             subjects_below_cutoff.add(subject)
-            
-
     logging.info("Kept {} of {} total subjects after filtering for evenness of possible coverage".format(len(subjects_below_cutoff),len(subject_len)))
 
     # 2. Use the combination of the bitscores (alignment quality) and subject-read-depth to iterative filter low-likely alignments of queries against subjects
@@ -347,6 +345,11 @@ def parse_alignment(align_fp, QSEQID_i = 0, SSEQID_i = 1, SLEN_i  = 13, BITSCORE
     subject_lengths = np.zeros(shape=(len(subject_i)),dtype=int)
     for subject in subject_i:
         subject_lengths[subject_i[subject]] = subject_len[subject]
+
+    # Free up memory for subject-query pairs already filtered
+    for subject in subject_len:
+        if not subject in subjects_below_cutoff:
+            del subject_query_coverage[subject]
     
     # Numpy matrix to store the bitscores
     bitscore_mat = np.zeros(shape=(len(subject_i), len(query_i)), dtype='float64')
@@ -391,7 +394,7 @@ def parse_alignment(align_fp, QSEQID_i = 0, SSEQID_i = 1, SLEN_i  = 13, BITSCORE
         
         logging.info("Iteration {}. Min {:.4f} Mean {:.3f}".format(iterations_n,align_mat_w[align_mat_w > 0.0].min(), align_mat_w[align_mat_w > 0.0].mean()))
         if prior_align_norm_min_max == align_norm_min_max:
-            print("Complete")
+            print("Interations complete")
             break
         # Implicit else
         prior_align_norm_min_max = align_norm_min_max
@@ -406,21 +409,21 @@ def parse_alignment(align_fp, QSEQID_i = 0, SSEQID_i = 1, SLEN_i  = 13, BITSCORE
     logging.info("Starting final coverage evenness screening of {} subjects with filtered alignments.".format(len(subjects_with_iteratively_aligned_reads)))
     subject_final_passed = set()
 
-    for s in subjects_with_iteratively_aligned_reads:
+    for subject in subjects_with_iteratively_aligned_reads:
         # np zero vector of ints to be our coverage-o-gram
-        subject_coverage = np.zeros(shape=(subject_len[s],), dtype=int)
+        subject_coverage = np.zeros(shape=(subject_len[subject],), dtype=int)
         
         # For subject s, which query_ids still have a non-zero normalized alignment score. 
-        subject_queries = {[p[0] for p in query_i.items() if p[1]==i][0] for i in np.argwhere(align_mat_w[subjects_with_iteratively_aligned_reads[s]]).flatten()}
+        subject_queries = {[p[0] for p in query_i.items() if p[1]==i][0] for i in np.argwhere(align_mat_w[subjects_with_iteratively_aligned_reads[subject]]).flatten()}
         for sq in subject_queries:
             # Fill in the coverage-o-gram with these queries
-            subject_coverage[subject_query_coverage[s][sq][0]:subject_query_coverage[s][sq][1]]+=1
+            subject_coverage[subject_query_coverage[subject][sq][0]:subject_query_coverage[subject][sq][1]]+=1
 
         # Our testing point. With the trimmed coverage-o-gram are we still below our evenness threshold?
-        if np.std(subject_coverage[STRIM_5:-STRIM_3])/np.mean(subject_coverage[STRIM_5:-STRIM_3]) < SD_MEAN_CUTOFF:
-            subject_final_passed.add(s)
+        if np.std(subject_coverage[STRIM_5:-1*STRIM_3])/np.mean(subject_coverage[STRIM_5:-STRIM_3]) < SD_MEAN_CUTOFF:
+            subject_final_passed.add(subject)
 
-    logging.info("Done filtering subjects. {} subjects are felt to likely be present".format(len(subject_final_passed))
+    logging.info("Done filtering subjects. {} subjects are felt to likely be present".format(len(subject_final_passed)))
 
     return subject_final_passed
 
