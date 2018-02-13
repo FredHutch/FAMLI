@@ -37,6 +37,9 @@ class ErrorModelFAMLI:
         # Keep track of the names of each input
         self.query_names = {}
 
+        # Keep track of the abundance of all references
+        self.ref_abund = {}
+
         # For this genetic code, determine the proportion of nucleotide
         # substitutions that result in a change in the encoded amino acid
         table = CodonTable.unambiguous_dna_by_id[genetic_code]
@@ -113,13 +116,9 @@ class ErrorModelFAMLI:
 
         return self.likelihood_cache[seq_len][n_mismatch]
 
-    def add_references(self, all_refs):
+    def add_reference(self, ref):
         """Set the starting abundance for all references."""
-        ref_prop = 1. / len(all_refs)
-        self.ref_abund = {
-            ref: ref_prop
-            for ref in all_refs
-        }
+        self.ref_abund[ref] = 1
 
     def add_prob_to_alignments(self, alignments, query_ix):
         """Add the relative likelihood metric to a set of alignments."""
@@ -130,89 +129,107 @@ class ErrorModelFAMLI:
         # maximum likelihood in the function below
 
         for a in alignments:
-            a["likelihood"] = self.edit_dist_prob(a["n_mismatch"], a["len"])
+            a["likelihood"] = self.edit_dist_prob(int(a["mismatch"]), int(a["qlen"]))
 
             # Set the query name
             self.query_names[query_ix] = a["query"]
 
             # Add the likelihood for this query and reference
-            self.psingle[query_ix][a["ref"]] = a["likelihood"]
+            self.psingle[query_ix][a["subject"]] = a["likelihood"]
 
-    def update_ref_abund(self):
-        """Calculate the estimated abundance per reference."""
-        self.ref_abund = defaultdict(float)
-        for query, ref_abund in self.psingle.items():
-            for ref, abund in ref_abund.items():
-                self.ref_abund[ref] += abund
+            self.add_reference(a["subject"])
 
-    def optimize_assignments(self, cutoff=0.5, max_prop=0.1):
+    def make_psingle_matrix(self):
+        """Calculate the prob of each read being from each reference."""
+        # Initialize with zeros (float64)
+        self.matrix = np.zeros((len(self.psingle), len(self.ref_abund)))
+
+        # Set the indices for the rows and columns
+        self.row_loc = {
+            query: ix for ix, query in enumerate(self.psingle.keys())
+        }
+        self.row_ix = {ix: query for query, ix in self.row_loc.items()}
+        self.col_loc = {
+            ref: ix for ix, ref in enumerate(self.ref_abund.keys())
+        }
+        self.col_ix = {ix: query for query, ix in self.col_loc.items()}
+
+        # Add the values for each alignment
+        for query, ref_prob in self.psingle.items():
+            for ref, prob in ref_prob.items():
+                self.matrix[
+                    self.row_loc[query],
+                    self.col_loc[ref]
+                ] += prob
+
+    def optimize_assignments(self, cutoff=0.05):
         """Iteratively optimize the assignments of reads."""
 
         # Keep track of the total number of alignments that we started with
         n_input = sum([len(v.values()) for v in self.psingle.values()])
 
         keep_iterating = True
-        n_removed = 0
         iterations = 0
 
-        # Recalculate the reference abundance
-        self.update_ref_abund()
+        # Make a matrix reformating the information in self.psingle
+        # into a new matrix called self.matrix
+        self.make_psingle_matrix()
+
+        # Initialize the reference abundance (using self.matrix)
+        # as the sum of the likelihood for each single read
+        self.ref_abund = self.matrix.sum(axis=0)
 
         while keep_iterating:
             iterations += 1
 
-            logging.info("ITERATION {:,} ({:,} removed)".format(
-                iterations, n_removed))
+            # Make a ptotal matrix, combining self.ref_abund and self.matrix
+            # This represents the likelihood of each query truly being from
+            # each reference, given the alignment quality and reference abund
+            ptotal = self.matrix * self.ref_abund
+            # Normalize each row (query) to sum to 1
+            ptotal = ptotal / ptotal.sum(axis=1, keepdims=True)
+
+            logging.info("ITERATION {:,} ({:,} alignments remaining)".format(
+                iterations, (ptotal > 0).sum()))
             keep_iterating = False
 
-            # Calculate the likelihood for every query,
-            # given the alignment likelihood and the reference abundance
-            for query, ref_prob in self.psingle.items():
+            # For each query (row)
+            for ix in range(ptotal.shape[0]):
+                # Get the column indices to remove
+                value_to_remove = ptotal[ix, ptotal[ix, :] > 0].min()
+                if value_to_remove > cutoff:
+                    continue
+                if value_to_remove == ptotal[ix, :].max():
+                    continue
 
-                # Calculate the reference probability based on the total sample
-                ptotal = pd.Series({
-                    ref: prob * self.ref_abund[ref]
-                    for ref, prob in ref_prob.items()
-                }).sort_values()
-
-                # Divide by the sum
-                ptotal = ptotal / ptotal.sum()
-
-                # Filter out alignments for which the aggregate probability is
-                # below the cuttoff, and also don't remove more than 10% of the
-                # alignments (rounding up to the nearest integer)
-
-                # Maximum number of alignments to consider for removal
-                max_to_consider = ceil(ptotal.shape[0] * max_prop)
-
-                # Iterate through each reference for this query
-                for ref, agg_prop in ptotal.cumsum()[:max_to_consider].items():
-                    # If the aggregate probability is below the cutoff
-                    if agg_prop <= cutoff:
-                        # Remove the information for this alignment
-                        del self.psingle[query][ref]
-                        n_removed += 1
-                        keep_iterating = True
+                # Zero out the likelihood for any alignments with this value
+                self.matrix[ix, ptotal[ix, :] == value_to_remove] = 0
+                keep_iterating = True
 
             # Recalculate the reference abundance
-            self.update_ref_abund()
+            self.ref_abund = ptotal.sum(axis=0)
 
         # Loop through the reads
         final_counts = defaultdict(int)
         self.assignments = {}
-        for query, query_ref_abund in self.psingle.items():
+        for query, query_ix in self.row_loc.items():
             # If there is only a single alignment left, assign the read
-            if len(query_ref_abund) == 1:
-                for ref in query_ref_abund.keys():
-                    final_counts[ref] += 1
+            potential_refs = [
+                ref
+                for ref, ref_ix in self.col_loc.items()
+                if self.matrix[query_ix, ref_ix] > 0
+            ]
+            if len(potential_refs) == 1:
+                ref = potential_refs[0]
 
-                    self.assignments[query] = ref
+                final_counts[ref] += 1
+
+                self.assignments[query] = ref
 
         final_counts = pd.Series(final_counts)
 
         logging.info("Iterations: {:,}".format(iterations))
         logging.info("Input: {:,}".format(n_input))
-        logging.info("Removed: {:,}".format(n_removed))
         logging.info("Duplicated: {:,}".format(
             len(self.psingle) - final_counts.sum()))
         logging.info("Deduplicated: {:,}".format(final_counts.sum()))
@@ -276,35 +293,6 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
     # This will group the alignments by query sequence
     alignments = [a for a in parse_alignments_by_query(align_fp)]
 
-    # Keep track of the total set of reference with any alignments
-    all_refs = set([
-        a["ref"]
-        for query in alignments
-        for a in query
-    ])
-
-    # Add the references to the error model
-    error_model.add_references(list(all_refs))
-
-    # Length of each reference sequence
-    ref_length = {}
-
-    # Read just the header to get the length of each reference
-    with open(align_fp, "rt") as f:
-        for line in f:
-            # Marker for reference length lines
-            if line[:3] == "@SQ":
-                # Split up the line
-                line = line.rstrip("\n").split("\t")
-                # Reference name is in the second field
-                assert len(line) == 3, line
-                ref = line[1][3:]
-                # Check if this reference has any alignments
-                if ref in all_refs:
-                    length = int(line[2][3:])
-                    # Add to the dict
-                    ref_length[ref] = length
-
     # Add a "likelihood" to every alignment
     # This is the likelihood that a single alignment is due to
     # sequencing error
@@ -314,7 +302,7 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
     # Optimize the read assignments, iteratively calculating the
     # total reference abundance and removing potential alignments
     # that fall below the specified level of likelihood
-    error_model.optimize_assignments(cutoff=0.5, max_prop=0.1)
+    error_model.optimize_assignments(cutoff=0.05)
 
     # Keep track of the number of reads and coverage across each reference
     # Keep track of the RAW stats, as well as the deduplicated alignments
@@ -327,6 +315,8 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
     # Coverage across each reference
     raw_cov = {}
     final_cov = {}
+    # Length of each reference
+    ref_length = {}
 
     # Now go over the alignments again and reassign each read
     # to the most likely reference
@@ -334,18 +324,20 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
         total_reads += 1
         # Add to the raw abundances
         for a in query:
-            raw_reads[a["ref"]] += 1
+            raw_reads[a["subject"]] += 1
 
             # Add to the coverage metrics
-            if a["ref"] not in raw_cov:
+            if a["subject"] not in raw_cov:
+                # Save the reference length
+                ref_length[a["subject"]] = a["slen"]
                 # Initialize the coverage array with zeros
-                raw_cov[a["ref"]] = np.zeros(ref_length[a["ref"]])
-                final_cov[a["ref"]] = np.zeros(ref_length[a["ref"]])
+                raw_cov[a["subject"]] = np.zeros(int(a["slen"]))
+                final_cov[a["subject"]] = np.zeros(int(a["slen"]))
 
             # Add to the raw coverage metric
-            start = a["pos"] - 1
-            end = a["pos"] - 1 + a["len"]
-            raw_cov[a["ref"]][start:end] += 1
+            start = min(int(a["sstart"]), int(a["send"]))
+            end = max(int(a["sstart"]), int(a["send"]))
+            raw_cov[a["subject"]][start:end] += 1
 
         # Get the deduplicated reference for this query
         ref = error_model.assignments.get(query_ix)
@@ -356,15 +348,15 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
 
         deduplicated_reads += 1
 
-        a = [a for a in query if a["ref"] == ref]
+        a = [a for a in query if a["subject"] == ref][0]
 
         # Increment the read count
-        final_reads[a["ref"]] += 1
+        final_reads[a["subject"]] += 1
 
         # Add to the final coverage metric
-        start = a["pos"] - 1
-        end = a["pos"] - 1 + a["len"]
-        final_cov[a["ref"]][start:end] += 1
+        start = min(int(a["sstart"]), int(a["send"]))
+        end = max(int(a["sstart"]), int(a["send"]))
+        final_cov[a["subject"]][start:end] += 1
 
     # Now calculate summary statistics for each reference
     output = [{
@@ -385,28 +377,25 @@ def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
 
 def parse_alignments_by_query(align_fp):
     """Function to parse the SAM alignments, grouping them by query ID."""
+    # Column names
+    header = [
+        "query", "subject", "pct_iden",
+        "alen", "mismatch", "gapopen",
+        "qstart", "qend", "sstart", "send",
+        "evalue", "bitscore", "qlen", "slen",
+    ]
     # Keep all of the alignments for a given read here
     buff = []
     # Keep track of the query ID for the previous alignment
     last_query = None
     with open(align_fp, "rt") as f:
         for line in f:
-            if line[0] == "@":
-                continue
             line = line.rstrip("\n").split("\t")
-            if len(line) < 10:
+            if len(line) != len(header):
                 continue
-            ref = line[2]
-            # Skip unaligned reads
-            if ref == "*":
-                continue
+
             # Get the query ID
             query = line[0]
-            # Get the start position
-            start_pos = int(line[3])
-
-            # Get the alignment score
-            n_mismatch = parse_mismatch_tag(line[11:])
 
             # If this is a new query ID
             if query != last_query:
@@ -415,20 +404,11 @@ def parse_alignments_by_query(align_fp):
                     yield buff
                     # Reset the buffer
                     buff = []
-                # The query sequence is only printed in the first row
-                query_len = len(line[9])
-
                 # Reset the last query sequence
                 last_query = query
 
             # Add this alignment's information to the buffer
-            buff.append({
-                "query": query,
-                "ref": ref,
-                "pos": start_pos,
-                "len": query_len,
-                "n_mismatch": n_mismatch
-            })
+            buff.append(dict(zip(header, line)))
 
     # If there is data for the last query, yield it
     if len(buff) > 0:
