@@ -284,7 +284,7 @@ def align_reads(read_fp,               # FASTQ file path
     return align_fp
 
 
-def parse_alignment(align_fp,
+def parse_alignment(align_handle,
                     QSEQID_i=0,
                     SSEQID_i=1,
                     QSTART_i=6,
@@ -317,20 +317,20 @@ def parse_alignment(align_fp,
     # Fill our data structures by parsing our alignment.
     logging.info("Starting to parse the alignment for the first time.")
     i = 0
-    with open(align_fp, "rt") as f:
-        for line in f:
-            i += 1
-            if i % 1000000 == 0:
-                logging.info("{} lines of alignment parsed".format(i))
-            line_list = line.strip().split()
-            query = line_list[QSEQID_i]
-            query_set.add(query)
-            subject = line_list[SSEQID_i]
-            subject_query_coverage[subject][query] = (
-                int(line_list[SSTART_i]),
-                int(line_list[SEND_i])
-            )
-            subject_len[subject] = int(line_list[SLEN_i])
+    align_handle.seek(0)
+    for line in align_handle:
+        i += 1
+        if i % 1000000 == 0:
+            logging.info("{} lines of alignment parsed".format(i))
+        line_list = line.strip().split()
+        query = line_list[QSEQID_i]
+        query_set.add(query)
+        subject = line_list[SSEQID_i]
+        subject_query_coverage[subject][query] = (
+            int(line_list[SSTART_i]),
+            int(line_list[SEND_i])
+        )
+        subject_len[subject] = int(line_list[SLEN_i])
 
     logging.info("Completed parsing for coverage {} subjects and {} queries".format(len(subject_query_coverage), len(query_set)))
 
@@ -382,16 +382,16 @@ def parse_alignment(align_fp,
 
     logging.info("Starting to parse alignment file for the second (and last) time, to fill the bitscore matrix.")
     i = 0
-    with open(align_fp, "rt") as f:
-        for line in f:
-            i += 1
-            if i % 1000000 == 0:
-                logging.info("{} lines of alignment parsed".format(i))
-            line_list = line.strip().split()
-            query = line_list[QSEQID_i]
-            subject = line_list[SSEQID_i]
-            if subject in subject_i:
-                bitscore_mat[subject_i[subject], query_i[query]] = float(line_list[BITSCORE_i])
+    align_handle.seek(0)
+    for line in align_handle:
+        i += 1
+        if i % 1000000 == 0:
+            logging.info("{} lines of alignment parsed".format(i))
+        line_list = line.strip().split()
+        query = line_list[QSEQID_i]
+        subject = line_list[SSEQID_i]
+        if subject in subject_i:
+            bitscore_mat[subject_i[subject], query_i[query]] = float(line_list[BITSCORE_i])
 
     logging.info("Completed parsing alignment to fill bitscore matrix (second and final pass)")
 
