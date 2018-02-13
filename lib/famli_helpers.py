@@ -3,13 +3,14 @@
 import json
 import logging
 import pandas as pd
-import numpy as np
 from math import ceil
 from scipy.stats import binom
 from Bio.Data import CodonTable
 from .exec_helpers import run_cmds
 from itertools import permutations
+
 from collections import defaultdict
+import numpy as np
 
 
 class ErrorModelFAMLI:
@@ -283,96 +284,148 @@ def align_reads(read_fp,               # FASTQ file path
     return align_fp
 
 
-def parse_alignment(align_fp, error_rate=0.001, genetic_code=11):
-    """Parse an alignment in SAM format."""
+def parse_alignment(align_fp, QSEQID_i = 0, SSEQID_i = 1, SLEN_i  = 13, BITSCORE_i = 11, QSTART_i = 6, QEND_i = 7, SSTART_i = 8, SEND_i = 9, SD_MEAN_CUTOFF = 0.33, STRIM_5=18, STRIM_3=18, ITERATIONS_MAX=1000):
+    """
+    Parse an alignment in BLAST6 format and determine which subjects are likely to be present. This is the core of FAMLI.
+    BLAST 6 columns by default (in order): qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen slen
+                                              0     1       2       3       4       5       6   7   8       9   10      11      12   13  
+    """
 
-    # Initialize the error model
-    error_model = ErrorModelFAMLI(error_rate, genetic_code=genetic_code)
+    # 1. Look at the how well each subject could be covered and to get a sense of the subjects and queries present
+    
+    # Nested dictionary. First key is subject_id. Second key is query_id. Value is a tuple of (SSTART, SEND) for this subject-query pair
+    subject_query_coverage = defaultdict(dict)
+    
+    # Dictionary. Key is subject_id. Value is the SLEN
+    subject_len = {}
 
-    # Read over the file once to get all of the alignments
-    # This will group the alignments by query sequence
-    alignments = [a for a in parse_alignments_by_query(align_fp)]
+    # Set of all possible query_ids
+    query_set = set()
 
-    # Add a "likelihood" to every alignment
-    # This is the likelihood that a single alignment is due to
-    # sequencing error
-    for query_ix, a in enumerate(alignments):
-        error_model.add_prob_to_alignments(a, query_ix)
+    # Fill our data structures by parsing our alignment.
+    logging.info("Starting to parse the alignment for the first time.")
+    i = 0
+    align_fp.seek(0)
+    for line in align_fp:
+        i+=1
+        if i%1000000 == 0:
+            logging.info("{} lines of alignment parsed".format(i))
+        line_list = line.strip().split()
+        query = line_list[QSEQID_i]
+        query_set.add(query)
+        subject = line_list[SSEQID_i]
+        subject_query_coverage[subject][query]=(int(line_list[QSTART_i]), int(line_list[QEND_i]))
+        subject_len[subject] = int(line_list[SLEN_i])
+        
+    logging.info("Completed parsing for coverage {} subjects and {} queries".format(len(subject_len), len(query_set)))
 
-    # Optimize the read assignments, iteratively calculating the
-    # total reference abundance and removing potential alignments
-    # that fall below the specified level of likelihood
-    error_model.optimize_assignments(cutoff=0.05)
+    # Now we create coverage-o-grams for each subject, considering how it COULD be covered. Reject those for which the coverage is uneven enough to be implausible
+    subjects_below_cutoff = set()
+    for subject in subject_len:
+        # Get our first layer dict lookup done
+        subject_query = subject_query_coverage[subject]
+        # Create a zero array of ints the length of this subject
+        subject_could_coverage = np.zeros(shape=(subject_len[subject],), dtype=int)
+        # For each query, add 1 for the relevant positions
+        for q in subject_query:
+            subject_could_coverage[subject_query[q][0]:subject_query[q][1]] += 1
+        # Trim the 5' and 3' ends of the subject. Due to overhangs, they tend to be less covered. 
+        subject_could_coverage_trimmed = subject_could_coverage[STRIM_5:-STRIM_3]
+        # Using the trimmed coverage-o-gram, if the STD / mean of coverage is LESS than a threshold (empirically set to 0.33), it is a subject to keep
+        if np.std(subject_could_coverage_trimmed) / np.mean(subject_could_coverage_trimmed) <= SD_MEAN_CUTOFF:
+            subjects_below_cutoff.add(subject)
+            
 
-    # Keep track of the number of reads and coverage across each reference
-    # Keep track of the RAW stats, as well as the deduplicated alignments
+    logging.info("Kept {} of {} total subjects after filtering for evenness of possible coverage".format(len(subjects_below_cutoff),len(subject_len)))
 
-    # Number of reads
-    total_reads = 0
-    deduplicated_reads = 0
-    raw_reads = defaultdict(int)
-    final_reads = defaultdict(int)
-    # Coverage across each reference
-    raw_cov = {}
-    final_cov = {}
-    # Length of each reference
-    ref_length = {}
+    # 2. Use the combination of the bitscores (alignment quality) and subject-read-depth to iterative filter low-likely alignments of queries against subjects
+    # Indicies for quick lookup
+    subject_i = {n: i for i,n in enumerate(subjects_below_cutoff)}
+    query_i = {n: i for i, n in enumerate(query_set)}
 
-    # Now go over the alignments again and reassign each read
-    # to the most likely reference
-    for query_ix, query in enumerate(alignments):
-        total_reads += 1
-        # Add to the raw abundances
-        for a in query:
-            raw_reads[a["subject"]] += 1
+    # Subject Length vector to use for later normalization of the subject read depths
+    subject_lengths = np.zeros(shape=(len(subject_i)),dtype=int)
+    for subject in subject_i:
+        subject_lengths[subject_i[subject]] = subject_len[subject]
+    
+    # Numpy matrix to store the bitscores
+    bitscore_mat = np.zeros(shape=(len(subject_i), len(query_i)), dtype='float64')
 
-            # Add to the coverage metrics
-            if a["subject"] not in raw_cov:
-                # Save the reference length
-                ref_length[a["subject"]] = a["slen"]
-                # Initialize the coverage array with zeros
-                raw_cov[a["subject"]] = np.zeros(int(a["slen"]))
-                final_cov[a["subject"]] = np.zeros(int(a["slen"]))
+    logging.info("Starting to parse alignment file for the second (and last) time, to fill the bitscore matrix.")
+    i=0
+    align_fp.seek(0)
+    for line in align_fp:
+        i+=1
+        if i%1000000 == 0:
+            logging.info("{} lines of alignment parsed".format(i))        
+        line_list = line.strip().split()
+        query = line_list[QSEQID_i]
+        subject = line_list[SSEQID_i]
+        if subject in subject_i:
+            bitscore_mat[subject_i[subject], query_i[query]] = float(line_list[BITSCORE_i])
 
-            # Add to the raw coverage metric
-            start = min(int(a["sstart"]), int(a["send"]))
-            end = max(int(a["sstart"]), int(a["send"]))
-            raw_cov[a["subject"]][start:end] += 1
+    logging.info("Completed parsing alignment to fill bitscore matrix (second and final pass)")
 
-        # Get the deduplicated reference for this query
-        ref = error_model.assignments.get(query_ix)
+    # Iterative alignment filtering
+    # Idea here is to take the alignemnt scores (bitscores here) plus the length-normalized subject coverage to calcualate a likelihood [0-1] that a given query came from a given subject and then prune the lowest likelihood alignments.
+    # We repeat this process iteratively (reweighting after pruning) to until we either converge OR reach our maximum iterations. 
+    iterations_n =0
+    
+    # Initialize some variables
+    prior_align_norm_min_max = -1
 
-        # Skip any reads that cannot be deduplicated
-        if ref is None:
-            continue
+    while iterations_n < ITERATIONS_MAX:
+        iterations_n+=1
+        # Weight each alignment score by the total mass of the subject
+        align_mat_w = (bitscore_mat.T * (np.sum(bitscore_mat, axis=1)/subject_lengths)).T
+        
+        # And then normalize so each query sums to 1.0
+        align_mat_w = (align_mat_w.astype('float') / np.sum(align_mat_w, axis=0))
+        
+        # Generate a per-query vector of maximum normalized [0-1] alignment scores 
+        # Then take the minimum of that vector.
+        align_norm_min_max = np.min(align_mat_w.max(axis=0))
+        
+        # Zero out any alignments below our minumum maximum alignment score
+        bitscore_mat[align_mat_w < align_norm_min_max] = 0.0
+        
+        logging.info("Iteration {}. Min {:.4f} Mean {:.3f}".format(iterations_n,align_mat_w[align_mat_w > 0.0].min(), align_mat_w[align_mat_w > 0.0].mean()))
+        if prior_align_norm_min_max == align_norm_min_max:
+            print("Complete")
+            break
+        # Implicit else
+        prior_align_norm_min_max = align_norm_min_max
+        # and proceed to next iteration 
+    
+    # Now let us get the subjects with some remaining alignments.
+    subjects_with_iteratively_aligned_reads = {[p[0] for p in subject_i.items() if p[1] == i][0]: i for i in np.argwhere(align_mat_w.sum(axis=1)).flatten()}
 
-        deduplicated_reads += 1
+    # 3. Regenerate coverage-o-grams for the subjects that still have iteratively mapped queries. 
+    # Create coverage-O-grams for the subjects with iteratively assigned reads
+    # Use our same SD / mean coverage metric to screen now with the reassigned reads.
+    logging.info("Starting final coverage evenness screening of {} subjects with filtered alignments.".format(len(subjects_with_iteratively_aligned_reads)))
+    subject_final_passed = set()
 
-        a = [a for a in query if a["subject"] == ref][0]
+    for s in subjects_with_iteratively_aligned_reads:
+        # np zero vector of ints to be our coverage-o-gram
+        subject_coverage = np.zeros(shape=(subject_len[s],), dtype=int)
+        
+        # For subject s, which query_ids still have a non-zero normalized alignment score. 
+        subject_queries = {[p[0] for p in query_i.items() if p[1]==i][0] for i in np.argwhere(align_mat_w[subjects_with_iteratively_aligned_reads[s]]).flatten()}
+        for sq in subject_queries:
+            # Fill in the coverage-o-gram with these queries
+            subject_coverage[subject_query_coverage[s][sq][0]:subject_query_coverage[s][sq][1]]+=1
 
-        # Increment the read count
-        final_reads[a["subject"]] += 1
+        # Our testing point. With the trimmed coverage-o-gram are we still below our evenness threshold?
+        if np.std(subject_coverage[STRIM_5:-STRIM_3])/np.mean(subject_coverage[STRIM_5:-STRIM_3]) < SD_MEAN_CUTOFF:
+            subject_final_passed.add(s)
 
-        # Add to the final coverage metric
-        start = min(int(a["sstart"]), int(a["send"]))
-        end = max(int(a["sstart"]), int(a["send"]))
-        final_cov[a["subject"]][start:end] += 1
+    logging.info("Done filtering subjects. {} subjects are felt to likely be present".format(len(subject_final_passed))
 
-    # Now calculate summary statistics for each reference
-    output = [{
-        "id": ref,
-        "length": ref_length[ref],
-        "raw_reads": raw_read_count,
-        "raw_coverage": (raw_cov[ref] > 0).mean(),
-        "raw_depth": raw_cov[ref].mean(),
-        "final_reads": final_reads[ref],
-        "final_coverage": (final_cov[ref] > 0).mean(),
-        "final_depth": final_cov[ref].mean(),
-    }
-        for ref, raw_read_count in raw_reads.items()
-    ]
+    return subject_final_passed
 
-    return total_reads, deduplicated_reads, output
+
+
 
 
 def parse_alignments_by_query(align_fp):
