@@ -30,7 +30,7 @@ class BLAST6Parser:
         """Parse a file, while keeping track of the subject lengths."""
         for i, line in enumerate(align_handle):
             if i % 1000000 == 0 and i > 0:
-                logging.info("{} lines of alignment parsed".format(i))
+                logging.info("{:,} lines of alignment parsed".format(i))
             line_list = line.strip().split()
             # Get the query and subject
             query = line_list[QSEQID_i]
@@ -94,7 +94,7 @@ def parse_alignment(align_handle,
     # After parsing, the subject lengths are in parser.subject_len
     # and the query set is in parser.query_set
 
-    logging.info("Done parsing {} subjects and {} queries".format(
+    logging.info("Done parsing {:,} subjects and {:,} queries".format(
         len(parser.subject_len),
         len(parser.query_set)
     ))
@@ -204,7 +204,7 @@ def parse_alignment(align_handle,
             # Zero out any alignments below our minumum maximum alignment score
             bitscore_mat[align_mat_w < align_norm_min_max] = 0.0
 
-            logging.info("Iteration {}. Min {:.4f} Mean {:.3f}".format(iterations_n,align_mat_w[align_mat_w > 0.0].min(), align_mat_w[align_mat_w > 0.0].mean()))
+            logging.info("Iteration {:,}. Min {:.4f} Mean {:.3f}".format(iterations_n,align_mat_w[align_mat_w > 0.0].min(), align_mat_w[align_mat_w > 0.0].mean()))
             if prior_align_norm_min_max == align_norm_min_max:
                 print("Interations complete")
                 break
@@ -218,7 +218,7 @@ def parse_alignment(align_handle,
         # 3. Regenerate coverage-o-grams for the subjects that still have iteratively mapped queries. 
         # Create coverage-O-grams for the subjects with iteratively assigned reads
         # Use our same SD / mean coverage metric to screen now with the reassigned reads.
-        logging.info("Starting final coverage evenness screening of {} subjects with filtered alignments.".format(len(subjects_with_iteratively_aligned_reads)))
+        logging.info("Starting final coverage evenness screening of {:,} subjects with filtered alignments.".format(len(subjects_with_iteratively_aligned_reads)))
         subject_final_passed = set()
 
         for subject in subjects_with_iteratively_aligned_reads:
@@ -244,7 +244,7 @@ def parse_alignment(align_handle,
                     "nreads": len(subject_queries),
                 })
 
-        logging.info("Done filtering subjects. {} subjects are felt to likely be present".format(len(subject_final_passed)))
+        logging.info("Done filtering subjects. {:,} subjects are felt to likely be present".format(len(subject_final_passed)))
 
     return output
 
