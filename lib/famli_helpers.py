@@ -492,7 +492,54 @@ def parse_alignment(align_handle,
 
 def group_cooccurring_subjects(subject_query_coverage):
     """Get the sets of subjects that share any queries."""
-    yield subject_query_coverage.keys()
+
+    # Get the dict of the subjects that each query aligns to
+    query_subject_dict = defaultdict(set)
+    for subject, queries in subject_query_coverage.items():
+        for query in queries:
+            query_subject_dict[query].add(subject)
+
+    # Now assemble the groups of subjects that share any queries
+    subject_groups = []
+    for query_ix, g in enumerate(query_subject_dict.values()):
+        # See which pre-existing groups this query matches
+        matching_groups = [
+            ix
+            for ix, q in enumerate(subject_groups)
+            if g & q
+        ]
+        if len(matching_groups) == 0:
+            # No existing groups match
+            # Add to the end of the list
+            subject_groups.append(g)
+        elif len(matching_groups) == 1:
+            # A single existing group matches
+            # Add to the existing group
+            subject_groups[matching_groups[0]] |= g
+        else:
+            # Multiple groups match
+            # Make a new larger group
+            for ix in matching_groups:
+                g |= subject_groups[ix]
+            # Remove the existing matches
+            subject_groups = [
+                q
+                for ix, q in enumerate(subject_groups)
+                if ix not in matching_groups
+            ]
+            # Add to the end of the list
+            subject_groups.append(g)
+        if query_ix % 1e6 == 0 and query_ix > 0:
+            msg = "Processing {:,} queries to make {:,} co-occuring subject groups"
+            logging.info(
+                msg.format(query_ix, len(subject_groups)))
+
+    # Return the results
+    msg = "Processed {:,} queries to make {:,} co-occuring subject groups"
+    logging.info(
+        msg.format(query_ix, len(subject_groups)))
+    for g in subject_groups:
+        yield g
 
 
 def parse_alignments_by_query(align_fp):
