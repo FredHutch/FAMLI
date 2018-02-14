@@ -77,7 +77,7 @@ def parse_alignment(align_handle,
     # 1. Look at the how well each subject could be covered and to get a sense of the subjects and queries present
 
     # Fill our data structures by parsing our alignment.
-    logging.info("Starting to parse the alignment for the first time.")
+    logging.info("Starting to parse the alignment.")
     parser = BLAST6Parser()
     alignments = [
         a
@@ -218,7 +218,7 @@ def parse_alignment(align_handle,
         # 3. Regenerate coverage-o-grams for the subjects that still have iteratively mapped queries. 
         # Create coverage-O-grams for the subjects with iteratively assigned reads
         # Use our same SD / mean coverage metric to screen now with the reassigned reads.
-        logging.info("Starting final coverage evenness screening of {:,} subjects with filtered alignments.".format(len(subjects_with_iteratively_aligned_reads)))
+        logging.info("Starting coverage evenness screening of {:,} subjects with filtered alignments.".format(len(subjects_with_iteratively_aligned_reads)))
         subject_final_passed = set()
 
         for subject in subjects_with_iteratively_aligned_reads:
@@ -243,6 +243,7 @@ def parse_alignment(align_handle,
                     "coverage": np.mean(subject_coverage > 0),
                     "nreads": len(subject_queries),
                 })
+                subject_final_passed.add(subject)
 
         logging.info("Done filtering subjects. {:,} subjects are felt to likely be present".format(len(subject_final_passed)))
 
