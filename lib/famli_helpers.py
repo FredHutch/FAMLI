@@ -5,55 +5,8 @@ import gzip
 import json
 import logging
 import argparse
-from .exec_helpers import run_cmds
-
 from collections import defaultdict
 import numpy as np
-
-
-def align_reads(read_fp,               # FASTQ file path
-                db_fp,                 # Local path to DB
-                temp_folder,           # Folder for results
-                query_gencode=11,      # Genetic code
-                threads=1,             # Threads
-                min_score=20,          # Minimum alignment score
-                blocks=4):             # Memory block size
-
-    """Align a set of reads with DIAMOND."""
-
-    align_fp = "{}.sam".format(read_fp)
-    logging.info("Input reads: {}".format(read_fp))
-    logging.info("Reference database: {}".format(db_fp))
-    logging.info("Genetic code: {}".format(query_gencode))
-    logging.info("Threads: {}".format(threads))
-    logging.info("Output: {}".format(align_fp))
-
-    run_cmds([
-            "diamond",
-            "blastx",
-            "--query", read_fp,             # Input FASTQ
-            "--out", align_fp,              # Alignment file
-            "--threads", str(threads),      # Threads
-            "--db", db_fp,                  # Reference database
-            "--outfmt", "6",                # Output format
-            "qseqid", "sseqid",
-            "pident", "length",
-            "mismatch", "gapopen",
-            "qstart", "qend",
-            "sstart", "send",
-            "evalue", "bitscore",
-            "qlen", "slen",
-            "--min-score", str(min_score),  # Minimum alignment score
-            "--query-cover", "50",          # Minimum query coverage
-            "--id", "80",                   # Minimum alignment identity
-            "--max-target-seqs", "0",       # Report all alignments
-            "--block-size", str(blocks),    # Memory block size
-            "--query-gencode",              # Genetic code
-            str(query_gencode),
-            "--unal", "0",                  # Don't report unaligned reads
-            ])
-
-    return align_fp
 
 
 class BLAST6Parser:
@@ -92,7 +45,7 @@ class BLAST6Parser:
             send = int(line_list[SEND_i])
 
             assert send > sstart
-            
+
             yield (
                 query,
                 subject,
