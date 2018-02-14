@@ -151,7 +151,7 @@ def load_and_filter_alignment_stage_1(align_handle,
                         combined_group_queries = subject_queries
                         # To adjust for the removed groups, we need to keep track of how many groups we've already popped.
                         num_popped=0
-                        for g_i in overlapping_group_idxs:
+                        for g_i in sorted(overlapping_group_idxs):
                             # Use pop to remove the old groups from the lists
                             combined_group_aln+=group_alignments.pop(g_i-num_popped)
                             combined_group_queries.update(group_queries.pop(g_i-num_popped))
