@@ -1,9 +1,11 @@
 #!/usr/bin/python
 
+import os
+import gzip
 import json
 import logging
+import argparse
 import pandas as pd
-from math import ceil
 from scipy.stats import binom
 from Bio.Data import CodonTable
 from .exec_helpers import run_cmds
@@ -594,3 +596,41 @@ def parse_mismatch_tag(tags):
     for t in tags:
         if t[:2] == "NM":
             return int(t[5:])
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="""
+    Parse a DIAMOND output file and save the deduplicated coverage data.
+    """)
+    parser.add_argument("--input",
+                        type=str,
+                        help="""DIAMOND output file in tabular format.""")
+    parser.add_argument("--output",
+                        type=str,
+                        help="""Output file in JSON format.""")
+
+    args = parser.parse_args()
+
+    assert os.path.exists(args.input)
+
+    # Set up logging
+    logFormatter = logging.Formatter(
+        '%(asctime)s %(levelname)-8s [FAMLI Parser] %(message)s'
+    )
+    rootLogger = logging.getLogger()
+    rootLogger.setLevel(logging.INFO)
+
+    # Write to STDOUT
+    consoleHandler = logging.StreamHandler()
+    consoleHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(consoleHandler)
+
+    if args.input.endswith(".gz"):
+        with gzip.open(args.input, "rt") as f:
+            total_reads, deduplicated_reads, output = parse_alignment(f)
+    else:
+        with open(args.input, "rt") as f:
+            total_reads, deduplicated_reads, output = parse_alignment(f)
+
+    with open(args.output, "wt") as fo:
+        json.dump(output, fo)
