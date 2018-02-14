@@ -88,11 +88,16 @@ class BLAST6Parser:
             self.subject_len[subject] = int(line_list[SLEN_i])
 
             # Yield a tuple with query, subject, sstart, send, bitscore
+            sstart = int(line_list[SSTART_i])
+            send = int(line_list[SEND_i])
+
+            assert send > sstart
+            
             yield (
                 query,
                 subject,
-                int(line_list[SSTART_i]),
-                int(line_list[SEND_i]),
+                sstart - 1,  # Convert to 0-based indexing
+                send,
                 float(line_list[BITSCORE_i])
             )
 
