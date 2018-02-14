@@ -63,7 +63,7 @@ def load_and_filter_alignment_stage_1(align_handle,
                                       SEND_i=9,
                                       BITSCORE_i=11,
                                       SLEN_i=13,
-                                      SD_MEAN_CUTOFF=0.33,
+                                      SD_MEAN_CUTOFF=1.0,
                                       STRIM_5=18,
                                       STRIM_3=18):
     # Loads an alignment from file. Filters subjects by evenness. Groups the alignments into subjects with shared reads. 
@@ -173,7 +173,7 @@ def load_and_filter_alignment_stage_1(align_handle,
 
     return (group_alignments, group_queries, subject_length)
 
-def iterative_alignment_prune_and_evenness_filter(group_aln, group_q, group_subjects, subject_length, STRIM_5=18, STRIM_3=18, ITERATIONS_MAX=1000, SD_MEAN_CUTOFF = 0.33):
+def iterative_alignment_prune_and_evenness_filter(group_aln, group_q, group_subjects, subject_length, STRIM_5=18, STRIM_3=18, ITERATIONS_MAX=1000, SD_MEAN_CUTOFF = 1.0):
     group_output = []
     logging.info("Stage 2: Iterative reassignments of {:,} subjects and {:,} queries".format(len(group_subjects),len(group_q)))
     # Indicies for quick lookup
@@ -275,7 +275,7 @@ def parse_alignment(align_handle,
                     SEND_i=9,
                     BITSCORE_i=11,
                     SLEN_i=13,
-                    SD_MEAN_CUTOFF=0.33,
+                    SD_MEAN_CUTOFF=1.0,
                     STRIM_5=18,
                     STRIM_3=18,
                     ITERATIONS_MAX=1000):
