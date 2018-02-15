@@ -30,10 +30,11 @@ class BLAST6Parser:
               SLEN_i=13):
         """Parse a file, while keeping track of the subject lengths."""
         logging.info("Reading in alignments")
+
         for i, line in enumerate(align_handle):
             if i % 1000000 == 0 and i > 0:
                 logging.info("{:,} lines of alignment parsed".format(i))
-            line_list = line.strip().split()
+            line_list = line.rstrip("\n").split("\t")
             # Get the query and subject
             query = line_list[QSEQID_i]
             subject = line_list[SSEQID_i]
@@ -42,7 +43,8 @@ class BLAST6Parser:
             send = int(line_list[SEND_i])
 
             # Save information for the subject length
-            self.subject_len[subject] = int(line_list[SLEN_i])
+            if subject not in self.subject_len:
+                self.subject_len[subject] = int(line_list[SLEN_i])
 
             # Add the query to the set of unique queries
             self.unique_queries.add(query)
