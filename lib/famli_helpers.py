@@ -179,36 +179,36 @@ class FAMLI_Reassignment:
 def filter_subjects_by_coverage(args):
     """Check whether the subject passes the coverage filter."""
 
-    alignments, subject_len, SD_MEAN_CUTOFF, STRIM_5, STRIM_3 = args
-
-    # Make a coverage vector
-    cov = np.zeros(subject_len, dtype=int)
-
-    # Add the alignments
-    for query, subject, sstart, send, bitscore in alignments:
-        cov[sstart: send] += 1
+    cov, SD_MEAN_CUTOFF, STRIM_5, STRIM_3 = args
 
     # Trim the ends
-    if subject_len >= STRIM_5 + STRIM_3 + 10:
+    if cov.shape[0] >= STRIM_5 + STRIM_3 + 10:
         cov = cov[STRIM_5: -STRIM_3]
 
     return cov.mean() > 0 and cov.std() / cov.mean() <= SD_MEAN_CUTOFF
 
 
-def index_aln_by_subject(alignments):
+def calc_cov_by_subject(alignments, subject_len):
     """Index a set of sorted alignments by subject."""
     # The output will be a dict with the start:stop index for each subject
     index = {}
+    coverages = {}
     last_subject = None
     last_start_ix = None
     for ix, a in enumerate(alignments):
-        if a[1] != last_subject:
+        query, subject, sstart, send, bitstore = a
+        if subject != last_subject:
             if last_subject is not None:
                 index[last_subject] = (last_start_ix, ix)
-            last_subject = a[1]
+            last_subject = subject
             last_start_ix = ix
+
+            # Initialize the coverages
+            coverages[subject] = np.zeros(subject_len[subject], dtype=int)
+        # Add to the coverage
+        coverages[subject][sstart:send] += 1
     index[last_subject] = (last_start_ix, ix + 1)
-    return index
+    return coverages, index
 
 
 def parse_alignment(align_handle,
@@ -240,24 +240,26 @@ def parse_alignment(align_handle,
     logging.info("Sorting alignments by subject")
     alignments.sort(key=lambda a: a[1])
 
-    logging.info("Indexing alignments by subject")
-    subject_index = index_aln_by_subject(alignments)
+    logging.info("Calculating coverage by subject")
+    subject_coverages, subject_index = calc_cov_by_subject(
+        alignments, parser.subject_len)
 
     # STEP 1. FILTER SUBJECTS BY "COULD" COVERAGE EVENNESS
     pool = Pool(threads)
     logging.info("FILTER 1: Even coverage of all alignments")
+
     filter_1 = pool.map(filter_subjects_by_coverage, [
         [
-            alignments[start_stop[0]: start_stop[1]],
-            parser.subject_len[subject],
+            coverage,
             SD_MEAN_CUTOFF,
             STRIM_5,
             STRIM_3
         ]
-        for subject, start_stop in subject_index.items()
+        for subject, coverage in subject_coverages.items()
     ])
+
     # Reformat as a dict
-    filter_1 = dict(zip(subject_index.keys(), filter_1))
+    filter_1 = dict(zip(subject_coverages.keys(), filter_1))
 
     logging.info("Subjects passing FILTER 1: {:,} / {:,}".format(
         sum(filter_1.values()), len(filter_1)
@@ -314,17 +316,17 @@ def parse_alignment(align_handle,
     # STEP 3: Filter subjects by even coverage of reassigned queries
     logging.info("FILTER 3: Filtering subjects by even sequencing coverage")
 
-    subject_index = index_aln_by_subject(alignments)
+    subject_coverages, subject_index = calc_cov_by_subject(
+        alignments, parser.subject_len)
 
     filter_3 = pool.map(filter_subjects_by_coverage, [
         [
-            alignments[start_stop[0]: start_stop[1]],
-            parser.subject_len[subject],
+            coverage,
             SD_MEAN_CUTOFF,
             STRIM_5,
             STRIM_3
         ]
-        for subject, start_stop in subject_index.items()
+        for subject, coverage in subject_coverages.items()
     ])
     # Reformat as a dict
     filter_3 = dict(zip(subject_index.keys(), filter_3))
