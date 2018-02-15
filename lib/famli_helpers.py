@@ -439,6 +439,7 @@ if __name__ == "__main__":
     """)
     parser.add_argument("--input",
                         type=str,
+                        required=True,
                         help="""DIAMOND output file in tabular format.""")
     parser.add_argument("--output",
                         type=str,
@@ -462,10 +463,11 @@ if __name__ == "__main__":
 
     if args.input.endswith(".gz"):
         with gzip.open(args.input, "rt") as f:
-            total_reads, deduplicated_reads, output = parse_alignment(f)
+            output = parse_alignment(f)
     else:
         with open(args.input, "rt") as f:
-            total_reads, deduplicated_reads, output = parse_alignment(f)
+            output = parse_alignment(f)
 
-    with open(args.output, "wt") as fo:
-        json.dump(output, fo)
+    if args.output:
+        with open(args.output, "wt") as fo:
+            json.dump(output, fo)
