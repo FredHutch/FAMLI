@@ -195,20 +195,20 @@ def filter_subjects_by_coverage(args):
     return cov.mean() > 0 and cov.std() / cov.mean() <= SD_MEAN_CUTOFF
 
 
-def group_aln_by_subject(alignments):
-    """Group a set of sorted alignments by subject."""
-    output = []
-    buff = []
+def index_aln_by_subject(alignments):
+    """Index a set of sorted alignments by subject."""
+    # The output will be a dict with the start:stop index for each subject
+    index = {}
     last_subject = None
-    for a in alignments:
+    last_start_ix = None
+    for ix, a in enumerate(alignments):
         if a[1] != last_subject:
             if last_subject is not None:
-                output.append([last_subject, buff])
-            buff = []
+                index[last_subject] = (last_start_ix, ix)
             last_subject = a[1]
-        buff.append(a)
-    output.append([last_subject, buff])
-    return output
+            last_start_ix = ix
+    index[last_subject] = (last_start_ix, ix + 1)
+    return index
 
 
 def parse_alignment(align_handle,
@@ -240,37 +240,35 @@ def parse_alignment(align_handle,
     logging.info("Sorting alignments by subject")
     alignments.sort(key=lambda a: a[1])
 
-    logging.info("Grouping alignments by subject")
-    alignments = group_aln_by_subject(alignments)
+    logging.info("Indexing alignments by subject")
+    subject_index = index_aln_by_subject(alignments)
 
     # STEP 1. FILTER SUBJECTS BY "COULD" COVERAGE EVENNESS
     pool = Pool(threads)
     logging.info("FILTER 1: Even coverage of all alignments")
     filter_1 = pool.map(filter_subjects_by_coverage, [
         [
-            subject_aln,
+            alignments[start_stop[0]: start_stop[1]],
             parser.subject_len[subject],
             SD_MEAN_CUTOFF,
             STRIM_5,
             STRIM_3
         ]
-        for subject, subject_aln in alignments
+        for subject, start_stop in subject_index.items()
     ])
+    # Reformat as a dict
+    filter_1 = dict(zip(subject_index.keys(), filter_1))
 
     logging.info("Subjects passing FILTER 1: {:,} / {:,}".format(
-        sum(filter_1), len(filter_1)
+        sum(filter_1.values()), len(filter_1)
     ))
 
-    # Subset the alignments
-    alignments = [
-        a for passes_filter, a in zip(filter_1, alignments)
-        if passes_filter
-    ]
-    # Flatten the alignments into a single list
+    # Subset the alignments to only those subjects passing the filter
     alignments = [
         a
-        for subject, subject_aln in alignments
-        for a in subject_aln
+        for subject, start_stop in subject_index.items()
+        for a in alignments[start_stop[0]: start_stop[1]]
+        if filter_1[subject]
     ]
 
     logging.info("Queries passing FILTER 1: {:,} / {:,}".format(
@@ -308,6 +306,7 @@ def parse_alignment(align_handle,
         if subject in model.aln_prob[query] and
         len(model.aln_prob[query]) == 1
     ]
+    queries_after_reassignment = len(alignments)
 
     logging.info("Finished reassigning reads ({:,} remaining)".format(
         len(alignments)))
@@ -315,34 +314,36 @@ def parse_alignment(align_handle,
     # STEP 3: Filter subjects by even coverage of reassigned queries
     logging.info("FILTER 3: Filtering subjects by even sequencing coverage")
 
-    alignments = group_aln_by_subject(alignments)
+    subject_index = index_aln_by_subject(alignments)
 
     filter_3 = pool.map(filter_subjects_by_coverage, [
         [
-            subject_aln,
+            alignments[start_stop[0]: start_stop[1]],
             parser.subject_len[subject],
             SD_MEAN_CUTOFF,
             STRIM_5,
             STRIM_3
         ]
-        for subject, subject_aln in alignments
+        for subject, start_stop in subject_index.items()
     ])
+    # Reformat as a dict
+    filter_3 = dict(zip(subject_index.keys(), filter_3))
 
     logging.info("Subjects passing FILTER 3: {:,} / {:,}".format(
-        sum(filter_3), len(filter_3)
+        sum(filter_3.values()), len(filter_3)
     ))
 
-    # Subset the alignments
-    alignments = [
-        a for passes_filter, a in zip(filter_3, alignments)
-        if passes_filter
-    ]
-    # Flatten the alignments into a single list
+    # Subset the alignments to only those subjects passing the filter
     alignments = [
         a
-        for subject, subject_aln in alignments
-        for a in subject_aln
+        for subject, start_stop in subject_index.items()
+        for a in alignments[start_stop[0]: start_stop[1]]
+        if filter_1[subject]
     ]
+
+    logging.info("Queries passing FILTER 3: {:,} / {:,}".format(
+        len(set([a[0] for a in alignments])), queries_after_reassignment
+    ))
 
     # Make the output by calculating coverage per subject
     output = []
