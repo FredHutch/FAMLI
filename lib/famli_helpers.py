@@ -5,8 +5,8 @@ import gzip
 import json
 import logging
 import argparse
-from collections import defaultdict
 import numpy as np
+from multiprocessing import Pool
 
 
 class BLAST6Parser:
@@ -55,6 +55,35 @@ class BLAST6Parser:
             )
 
 
+def coverage_filter(args):
+    """Test whether a given subject passes the coverage filter."""
+    subject, subject_len, subject_alignments, STRIM_5, STRIM_3, SD_MEAN_CUTOFF = args
+    subject_could_coverage = np.zeros(
+        shape=subject_len,
+        dtype=int
+    )
+    # Add the alignments to the coverage
+    for query, subject, sstart, send, bitscore in subject_alignments:
+        # Increment the coverage vector
+        subject_could_coverage[sstart:send] += 1
+
+    # Reject this subject if coverage is uneven enough to be implausible
+
+    # Trim the 5' and 3' ends of the subject.
+    # Due to overhangs, they tend to be less covered.
+    # Only trim subjects that have >= 30aa after trimming
+    if subject_len - (STRIM_5 + STRIM_3) >= 30:
+        subject_could_coverage = subject_could_coverage[STRIM_5:-STRIM_3]
+
+    # Using the trimmed coverage-o-gram, if the STD / mean of coverage is
+    # LESS than a threshold (empirically set to 0.33), we keep it
+    # THIS IS THE MOST COMPUTATIONALLY COSTLY PART OF THIS LOOP
+    subject_std = np.std(subject_could_coverage)
+    subject_mean = np.mean(subject_could_coverage)
+    passes_filter = subject_mean > 0 and (subject_std / subject_mean) <= SD_MEAN_CUTOFF
+    return subject, passes_filter
+
+
 def parse_alignment(align_handle,
                     QSEQID_i=0,
                     SSEQID_i=1,
@@ -64,17 +93,20 @@ def parse_alignment(align_handle,
                     SEND_i=9,
                     BITSCORE_i=11,
                     SLEN_i=13,
-                    SD_MEAN_CUTOFF=0.33,
+                    SD_MEAN_CUTOFF=1.0,
                     STRIM_5=18,
                     STRIM_3=18,
-                    ITERATIONS_MAX=1000):
+                    ITERATIONS_MAX=1000,
+                    threads=4):
     """
     Parse an alignment in BLAST6 format and determine which subjects are likely to be present. This is the core of FAMLI.
     BLAST 6 columns by default (in order): qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen slen
                                               0     1       2       3       4       5       6   7   8       9   10      11      12   13  
     """
 
-    # 1. Look at the how well each subject could be covered and to get a sense of the subjects and queries present
+    # ######################
+    # 1. Parse the alignment
+    # ######################
 
     # Fill our data structures by parsing our alignment.
     logging.info("Starting to parse the alignment.")
@@ -94,50 +126,80 @@ def parse_alignment(align_handle,
     # After parsing, the subject lengths are in parser.subject_len
     # and the query set is in parser.query_set
 
-    logging.info("Done parsing {:,} subjects and {:,} queries".format(
+    logging.info("Done parsing {:,} alignments".format(len(alignments)))
+    logging.info("Subjects: {:,}".format(
         len(parser.subject_len),
+    ))
+    logging.info("Queries: {:,}".format(
         len(parser.query_set)
     ))
 
+    # Sort the alignments by subject
+    logging.info("Sorting alignments by subject")
+    alignments = sorted(alignments, key=lambda a: a[1])
+    logging.info("Done sorting alignments")
+
+    # Collect the index range for each subject
+    logging.info("Indexing alignments by subject")
+    subject_index_ranges = {}
+    last_subject = None
+    last_start_ix = None
+    # Iterate through the alignments
+    for ix, a in enumerate(alignments):
+        # Check to see if this is a new subject
+        if a[1] != last_subject:
+            # Add the subject to the dict of index ranges
+            if last_subject is not None:
+                # Make sure the subject isn't being added twice
+                # (would indicate the list wasn't sorted completely)
+                assert last_subject not in subject_index_ranges
+                # The value is the start and end index positions
+                subject_index_ranges[last_subject] = (last_start_ix, ix)
+            # Set the start index for the new subject
+            last_start_ix = ix
+            # Set the name for the new subject
+            last_subject = a[1]
+    # Add the final subject
+    subject_index_ranges[last_subject] = (last_start_ix, ix + 1)
+    # Make sure that we have ranges for all of the subjects
+    assert len(subject_index_ranges) == len(parser.subject_len)
+    logging.info("Done indexing by subject")
+
+    # #############################
+    # 2. Calculate coverage metrics
+    # #############################
+
     # Now we create coverage-o-grams for each subject,
     # considering how it COULD be covered
-    subject_could_coverage = {}
-    # Iterate over the alignments
-    for query, subject, sstart, send, bitscore in alignments:
-        # For new subjects, make an empty vector
-        if subject not in subject_could_coverage:
-            subject_could_coverage[subject] = np.zeros(
-                shape=parser.subject_len[subject],
-                dtype=int
-                )
-        # Increment the coverage vector
-        subject_could_coverage[subject][sstart:send] += 1
-
-    # Now go through those coverage vectors and reject those for which the
-    # coverage is uneven enough to be implausible
+    # Keep a list of the subjects that will be KEPT
     subjects_below_cutoff = set()
-    # Iterate over all subjects
-    for subject in parser.subject_len:
-        # Trim the 5' and 3' ends of the subject.
-        # Due to overhangs, they tend to be less covered.
-        subj_cov_trimmed = subject_could_coverage[subject][STRIM_5:-STRIM_3]
-        # Using the trimmed coverage-o-gram, if the STD / mean of coverage is
-        # LESS than a threshold (empirically set to 0.33), we keep it
-        subject_std = np.std(subj_cov_trimmed)
-        subject_mean = np.mean(subj_cov_trimmed)
-        if (subject_std / subject_mean) <= SD_MEAN_CUTOFF:
+    logging.info("Calculating coverage metrics for {:,} subjects".format(
+        len(subject_index_ranges)))
+    # Iterate over the subjects
+    # THIS IS PRIME FOR MULTITHREADING
+
+    p = Pool(threads)
+    for subject, passes_filter in p.map(coverage_filter, [
+        [
+            subject,
+            parser.subject_len[subject],
+            alignments[
+                align_ix[0]: align_ix[1]
+            ],
+            STRIM_5,
+            STRIM_3,
+            SD_MEAN_CUTOFF,
+        ]
+        for subject, align_ix in subject_index_ranges.items()
+    ]):
+        if passes_filter:
             # Add to the set of subjects passing the filter
             subjects_below_cutoff.add(subject)
+        else:
+            # Remove from the list of index ranges
+            del subject_index_ranges[subject]
 
     logging.info("Kept {:,} of {:,} total subjects after filtering for evenness of possible coverage".format(len(subjects_below_cutoff),len(parser.subject_len)))
-
-    # Reduce the alignments to just those subjects passing the filter
-    alignments = [a for a in alignments if a[1] in subjects_below_cutoff]
-
-    logging.info(
-        "Number of alignments passing the first evenness filter: {:,}".format(
-            len(alignments)
-        ))
 
     # We will eventually report output for every subject, including:
     # id: name of the subject
@@ -149,8 +211,15 @@ def parse_alignment(align_handle,
 
     # 2. Find the groups of subjects that share any queries
     for subjects, queries, group_alignments in group_cooccurring_subjects(
-        alignments
+        alignments, subject_index_ranges
     ):
+
+        # TODO: Only perform more filtering if there is > 1 reference
+
+        logging.info("")
+        logging.info("Assigning {:,} reads among {:,} references".format(
+            len(queries), len(subjects)
+            ))
 
         # 3. Use the combination of the bitscores (alignment quality) and
         # subject-read-depth to iterative filter low-likely alignments of
@@ -206,7 +275,7 @@ def parse_alignment(align_handle,
 
             logging.info("Iteration {:,}. Min {:.4f} Mean {:.3f}".format(iterations_n,align_mat_w[align_mat_w > 0.0].min(), align_mat_w[align_mat_w > 0.0].mean()))
             if prior_align_norm_min_max == align_norm_min_max:
-                print("Interations complete")
+                logging.info("Interations complete")
                 break
             # Implicit else
             prior_align_norm_min_max = align_norm_min_max
@@ -218,7 +287,7 @@ def parse_alignment(align_handle,
         # 3. Regenerate coverage-o-grams for the subjects that still have iteratively mapped queries. 
         # Create coverage-O-grams for the subjects with iteratively assigned reads
         # Use our same SD / mean coverage metric to screen now with the reassigned reads.
-        logging.info("Starting coverage evenness screening of {:,} subjects with filtered alignments.".format(len(subjects_with_iteratively_aligned_reads)))
+        logging.info("Starting coverage evenness screening for {:,} subjects with filtered alignments.".format(len(subjects_with_iteratively_aligned_reads)))
         subject_final_passed = set()
 
         for subject in subjects_with_iteratively_aligned_reads:
@@ -247,64 +316,77 @@ def parse_alignment(align_handle,
 
         logging.info("Done filtering subjects. {:,} subjects are felt to likely be present".format(len(subject_final_passed)))
 
-    return output
+    logging.info("Number of input queries: {:,}".format(len(parser.query_set)))
+    logging.info("Number of input subjects: {:,}".format(len(parser.subject_len)))
+    logging.info("Number of input alignments: {:,}".format(len(alignments)))
+    logging.info("Number of deduplicated queries: {:,}".format(
+        sum([d["nreads"] for d in output])
+    ))
+    logging.info("Number of final subjects: {:,}".format(
+        len(output)
+    ))
+
+    return len(parser.query_set), output
 
 
-def group_cooccurring_subjects(alignments):
+def group_cooccurring_subjects(alignments, subject_index_ranges):
     """Get the sets of subjects that share any queries."""
 
-    # Get the dict of the subjects that each query aligns to
-    query_subject_dict = defaultdict(set)
-    for query, subject, sstart, send, bitscore in alignments:
-        query_subject_dict[query].add(subject)
+    # Get the dict of the queries that each subject aligns to
+    subject_queries = {
+        subject: set([
+            a[0]
+            for a in alignments[index_range[0]: index_range[1]]
+        ])
+        for subject, index_range in subject_index_ranges.items()
+    }
 
-    # Now assemble the groups of subjects that share any queries
+    # Make a list of all the subjects
+    all_subjects = [s for s in subject_queries]
+
+    # Make a list for the group number for those subjects
     subject_groups = []
-    for query_ix, g in enumerate(query_subject_dict.values()):
-        # See which pre-existing groups this query matches
-        matching_groups = [
-            ix
-            for ix, q in enumerate(subject_groups)
-            if g & q
-        ]
-        if len(matching_groups) == 0:
-            # No existing groups match
-            # Add to the end of the list
-            subject_groups.append(g)
-        elif len(matching_groups) == 1:
-            # A single existing group matches
-            # Add to the existing group
-            subject_groups[matching_groups[0]] |= g
-        else:
-            # Multiple groups match
-            # Make a new larger group
-            for ix in matching_groups:
-                g |= subject_groups[ix]
-            # Remove the existing matches
-            subject_groups = [
-                q
-                for ix, q in enumerate(subject_groups)
-                if ix not in matching_groups
-            ]
-            # Add to the end of the list
-            subject_groups.append(g)
-        if query_ix % 1e6 == 0 and query_ix > 0:
-            msg = "Processing {:,} queries to make {:,} co-occuring subject groups"
-            logging.info(
-                msg.format(query_ix, len(subject_groups)))
+
+    # Iterate through the list of subjects
+    for new_ix, new_subject in enumerate(all_subjects):
+        if new_ix % 100 == 0 and new_ix > 0:
+            logging.info("Grouping {:,} subjects by queries".format(new_ix))
+        # Check to see which of the previous subjects have overlap
+        for old_ix, old_subject in enumerate(all_subjects[:new_ix]):
+            # There is overlap
+            if subject_queries[old_subject] & subject_queries[new_subject]:
+                # Assign that previous subject to the new group
+                subject_groups[old_ix] = new_ix
+        # Add the new subject to this new group
+        subject_groups.append(new_ix)
 
     # Return the results
-    msg = "Processed {:,} queries to make {:,} co-occuring subject groups"
+    msg = "Processed {:,} subjects to make {:,} co-occuring subject groups"
     logging.info(
-        msg.format(query_ix, len(subject_groups)))
-    for g in subject_groups:
+        msg.format(len(subject_groups), len(set(subject_groups))))
+
+    # Yield each of the subject groups
+    for group in list(set(subject_groups)):
+        # Get the subjects in this group
+        subjects = [
+            subject
+            for subject, g in zip(all_subjects, subject_groups)
+            if group == g
+        ]
         # Get the alignments matching this group
-        group_alignments = [a for a in alignments if a[1] in g]
-        group_queries = set([
-            query
-            for query, subject, sstart, send, bitscore in group_alignments
-        ])
-        yield g, group_queries, group_alignments
+        group_alignments = [
+            a
+            for s in subjects
+            for a in alignments[
+                subject_index_ranges[s][0]:
+                subject_index_ranges[s][1]
+            ]
+        ]
+        group_queries = set([])
+        for s in subjects:
+            group_queries |= subject_queries[s]
+
+        yield subjects, group_queries, group_alignments
 
 
 def parse_alignments_by_query(align_fp):
@@ -371,6 +453,9 @@ if __name__ == "__main__":
     parser.add_argument("--output",
                         type=str,
                         help="""Output file in JSON format.""")
+    parser.add_argument("--threads",
+                        type=int,
+                        help="""Number of processors available.""")
 
     args = parser.parse_args()
 
@@ -390,10 +475,10 @@ if __name__ == "__main__":
 
     if args.input.endswith(".gz"):
         with gzip.open(args.input, "rt") as f:
-            total_reads, deduplicated_reads, output = parse_alignment(f)
+            aligned_reads, output = parse_alignment(f, threads=args.threads)
     else:
         with open(args.input, "rt") as f:
-            total_reads, deduplicated_reads, output = parse_alignment(f)
+            aligned_reads, output = parse_alignment(f, threads=args.threads)
 
     with open(args.output, "wt") as fo:
         json.dump(output, fo)
