@@ -54,6 +54,7 @@ class BLAST6Parser:
                 float(line_list[BITSCORE_i])
             )
 
+
 def load_and_filter_alignment_stage_1(align_handle,
                                       QSEQID_i=0,
                                       SSEQID_i=1,
@@ -132,11 +133,11 @@ def load_and_filter_alignment_stage_1(align_handle,
                     # Screen the existing group_queries for overlaps
                     group_query_overlaps = [len(subject_queries.intersection(gq))> 0 for gq in group_queries]
                     # Handle each case with the groups
-                    if np.sum(group_query_overlaps) == 0: 
-                        # No overlap with existing groups. Create a new one. 
+                    if np.sum(group_query_overlaps) == 0:
+                        # No overlap with existing groups. Create a new one.
                         group_queries.append(subject_queries)
                         group_alignments.append(subject_aln)
-                    elif np.sum(group_query_overlaps) ==1: 
+                    elif np.sum(group_query_overlaps) == 1:
                         # Only ONE group overlaps. Easy. Just add to this group
                         # Get the index of the group with which we have an overlap
                         overlap_group_idx  =[i for i, o in enumerate(group_query_overlaps) if o][0]
@@ -163,19 +164,17 @@ def load_and_filter_alignment_stage_1(align_handle,
             # Initialize for this new subject
             cur_subject = aln_line[1]
             subject_aln = []
-            subject_could_coverage =  np.zeros(shape=(parser.subject_len[aln_line[1]],), dtype=int)
+            subject_could_coverage = np.zeros(shape=(parser.subject_len[aln_line[1]],), dtype=int)
             # End we've found a new subject
         # Every loop through
         subject_aln.append(aln_line)
         subject_could_coverage[aln_line[2]:aln_line[3]] += 1
-    
-
 
     return (group_alignments, group_queries, subject_length)
 
 def iterative_alignment_prune_and_evenness_filter(group_aln, group_q, group_subjects, subject_length, STRIM_5=18, STRIM_3=18, ITERATIONS_MAX=1000, SD_MEAN_CUTOFF = 1.0):
     group_output = []
-    logging.info("Stage 2: Iterative reassignments of {:,} subjects and {:,} queries".format(len(group_subjects),len(group_q)))
+    #logging.info("Stage 2: Iterative reassignments of {:,} subjects and {:,} queries".format(len(group_subjects),len(group_q)))
     # Indicies for quick lookup
     subject_i = {n: i for i, n in enumerate(group_subjects)}
     query_i = {n: i for i, n in enumerate(group_q)}
@@ -191,11 +190,11 @@ def iterative_alignment_prune_and_evenness_filter(group_aln, group_q, group_subj
         dtype='float64'
     )
 
-    logging.info("Filling in the bitscore matrix")
+    #logging.info("Filling in the bitscore matrix")
     for query, subject, sstart, send, bitscore in group_aln:
         bitscore_mat[subject_i[subject], query_i[query]] = bitscore
 
-    logging.info("Completed filling the bitscore matrix.")
+    #logging.info("Completed filling the bitscore matrix.")
 
     # Iterative alignment filtering
     # Idea here is to take the alignemnt scores (bitscores here) plus the length-normalized subject coverage to calcualate a likelihood [0-1] that a given query came from a given subject and then prune the lowest likelihood alignments.
@@ -224,9 +223,9 @@ def iterative_alignment_prune_and_evenness_filter(group_aln, group_q, group_subj
         # Zero out any alignments below our minumum maximum alignment score
         bitscore_mat[align_mat_w < align_norm_min_max] = 0.0
 
-        logging.info("Iteration {:,}. Min {:.4f} Mean {:.3f}".format(iterations_n,align_mat_w[align_mat_w > 0.0].min(), align_mat_w[align_mat_w > 0.0].mean()))
+        #logging.info("Iteration {:,}. Min {:.4f} Mean {:.3f}".format(iterations_n,align_mat_w[align_mat_w > 0.0].min(), align_mat_w[align_mat_w > 0.0].mean()))
         if prior_align_norm_min_max == align_norm_min_max:
-            logging.info("Iterations complete")
+            #logging.info("Iterations complete")
             break
         # Implicit else
         prior_align_norm_min_max = align_norm_min_max
@@ -238,7 +237,7 @@ def iterative_alignment_prune_and_evenness_filter(group_aln, group_q, group_subj
     # Stage 3. Regenerate coverage-o-grams for the subjects that still have iteratively mapped queries. 
     # Create coverage-O-grams for the subjects with iteratively assigned reads
     # Use our same SD / mean coverage metric to screen now with the reassigned reads.
-    logging.info("Starting stage 3 coverage evenness screening of {:,} subjects with filtered alignments".format(len(subjects_with_iteratively_aligned_reads)))
+    #logging.info("Starting stage 3 coverage evenness screening of {:,} subjects with filtered alignments".format(len(subjects_with_iteratively_aligned_reads)))
     group_subject_final_passed = set()
 
     for subject in subjects_with_iteratively_aligned_reads:
@@ -262,7 +261,7 @@ def iterative_alignment_prune_and_evenness_filter(group_aln, group_q, group_subj
             })
             group_subject_final_passed.add(subject)
 
-    logging.info("Done filtering {:,} subjects for which {:,} passed".format(len(subject_i), len(group_subject_final_passed)))
+    #logging.info("Done filtering {:,} subjects for which {:,} passed".format(len(subject_i), len(group_subject_final_passed)))
     
     return group_output
 
@@ -285,6 +284,10 @@ def parse_alignment(align_handle,
                                               0     1       2       3       4       5       6   7   8       9   10      11      12   13  
     """
 
+    logging.info("SD / Mean cutoff: {}".format(SD_MEAN_CUTOFF))
+    logging.info("5' trimming: {}aa".format(STRIM_5))
+    logging.info("3' trimming: {}aa".format(STRIM_3))
+    
     # Stage 1: Load and filter possible alignments by eveness of the subject coverage, and group by subjects with overlapping queries
 
     group_alignments, group_queries, subject_length = load_and_filter_alignment_stage_1(
@@ -302,8 +305,9 @@ def parse_alignment(align_handle,
                                                                                     STRIM_3
     )
 
-    logging.info("{:,} groups of of queries with shared queries after filtering for evenness of possible coverage".format(len(group_alignments)))
-
+    logging.info("{:,} groups of queries with shared queries after filtering for evenness of possible coverage".format(len(group_alignments)))
+    logging.info("Number of queries: {:,}".format(sum(map(len, group_queries))))
+    logging.info("Number of subjects: {:,}".format(len(subject_length)))
 
     # Stage 2. PER GROUP Use the combination of the bitscores (alignment quality) and
     # subject-read-depth to iterative filter low-likely alignments of
@@ -313,11 +317,12 @@ def parse_alignment(align_handle,
     for i, (group_aln, group_q) in enumerate(zip(group_alignments, group_queries)):
         # Set comprehension to get all the possible subjects for this group
         group_subjects = {a[1] for a in group_aln}
-        logging.info("Starting stage 2 and 3 for group {:,} of {:,}, containing {:,} subjects and {:,} queries".format(i+1, len(group_alignments), len(group_subjects),len(group_q)))
-        output+=iterative_alignment_prune_and_evenness_filter(group_aln, group_q, group_subjects, subject_length, STRIM_5, STRIM_3, ITERATIONS_MAX, SD_MEAN_CUTOFF)
-        logging.info("Completed for group {:,}. {:,} subjects passed so far".format(i+1,len(output)))
+        #logging.info("Starting stage 2 and 3 for group {:,} of {:,}, containing {:,} subjects and {:,} queries".format(i+1, len(group_alignments), len(group_subjects),len(group_q)))
+        output += iterative_alignment_prune_and_evenness_filter(group_aln, group_q, group_subjects, subject_length, STRIM_5, STRIM_3, ITERATIONS_MAX, SD_MEAN_CUTOFF)
+        #logging.info("Completed for group {:,}. {:,} subjects passed so far".format(i+1,len(output)))
+
     logging.info("Completed for all groups. {:,} subjects passed".format(len(output)))
-    
+    logging.info("Queries passing all filters: {:,}".format(sum([d["nreads"] for d in output])))
 
     return output
 
