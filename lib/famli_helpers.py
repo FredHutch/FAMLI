@@ -81,12 +81,12 @@ class FAMLI_Reassignment:
             # Save information for the query and subject
             self.bitscores[query][subject] = bitscore
 
-    def init_ref_weight(self):
-        """Initialize the reference weights, all being equal."""
-        logging.info("Initializing reference weights")
-        self.ref_weight = {
-            ref: 1 / length
-            for ref, length in self.subject_len.items()
+    def init_subject_weight(self):
+        """Initialize the subject weights, all being equal."""
+        logging.info("Initializing subject weights")
+        self.subject_weight = {
+            subject: 1 / length
+            for subject, length in self.subject_len.items()
         }
 
         # Also initialize the alignment probabilities as the bitscores
@@ -95,7 +95,7 @@ class FAMLI_Reassignment:
         self.aln_prob_T = defaultdict(dict)
 
         # Keep track of the queries and subjects that will need to be updated
-        self.refs_to_update = set([])
+        self.subjects_to_update = set([])
         self.queries_to_update = set([])
 
         for query, bitscores in self.bitscores.items():
@@ -104,37 +104,37 @@ class FAMLI_Reassignment:
                 self.n_unique += 1
             bitscore_sum = sum(bitscores.values())
             for subject, bitscore in bitscores.items():
-                self.refs_to_update.add(subject)
+                self.subjects_to_update.add(subject)
                 v = bitscore / bitscore_sum
                 self.aln_prob[query][subject] = v
                 self.aln_prob_T[subject][query] = v
 
-    def recalc_ref_weight(self):
-        """Recalculate the reference weights."""
+    def recalc_subject_weight(self):
+        """Recalculate the subject weights."""
         self.queries_to_update = set([])
 
-        for ref, length in self.subject_len.items():
-            if ref in self.refs_to_update:
-                self.ref_weight[ref] = sum(self.aln_prob_T[ref].values()) / length
-                self.queries_to_update |= set(self.aln_prob_T[ref].keys())
+        for subject, length in self.subject_len.items():
+            if subject in self.subjects_to_update:
+                self.subject_weight[subject] = sum(self.aln_prob_T[subject].values()) / length
+                self.queries_to_update |= set(self.aln_prob_T[subject].keys())
 
     def recalc_aln_prob(self):
         """Recalculate the alignment probabilities."""
-        self.refs_to_update = set([])
+        self.subjects_to_update = set([])
 
         # Iterate over every query
         for query, aln_prob in self.aln_prob.items():
             if query in self.queries_to_update:
                 new_probs = [
-                    prob * self.ref_weight[ref]
-                    for ref, prob in aln_prob.items()
+                    prob * self.subject_weight[subject]
+                    for subject, prob in aln_prob.items()
                 ]
                 new_probs_sum = sum(new_probs)
-                for ix, ref in enumerate(aln_prob):
-                    self.refs_to_update.add(ref)
+                for ix, subject in enumerate(aln_prob):
+                    self.subjects_to_update.add(subject)
                     v = new_probs[ix] / new_probs_sum
-                    self.aln_prob[query][ref] = v
-                    self.aln_prob_T[ref][query] = v
+                    self.aln_prob[query][subject] = v
+                    self.aln_prob_T[subject][query] = v
 
     def trim_least_likely(self, cutoff=0.25):
         """Remove the least likely alignments."""
@@ -151,19 +151,19 @@ class FAMLI_Reassignment:
                 least_likely = max_p
 
             to_remove = [
-                ref for ref, prob in aln_prob.items()
+                subject for subject, prob in aln_prob.items()
                 if prob <= least_likely
             ]
-            # Don't remove all of the references
+            # Don't remove all of the subjects
             if len(to_remove) == len(aln_prob):
                 continue
 
             n_trimmed += len(to_remove)
 
-            # Remove the references
-            for ref in to_remove:
-                del self.aln_prob[query][ref]
-                del self.aln_prob_T[ref][query]
+            # Remove the subjects
+            for subject in to_remove:
+                del self.aln_prob[query][subject]
+                del self.aln_prob_T[subject][query]
 
             if len(self.aln_prob[query]) == 1:
                 self.n_unique += 1
@@ -275,22 +275,22 @@ def parse_alignment(align_handle,
         len(set([a[0] for a in alignments])), len(parser.unique_queries)
     ))
 
-    # STEP 2: Reassign multi-mapped reads to a single reference
+    # STEP 2: Reassign multi-mapped reads to a single subject
     logging.info("FILTER 2: Reassign queries to a single subject")
 
     # Add the alignments to a model to optimally re-assign reads
     model = FAMLI_Reassignment(alignments, parser.subject_len)
 
-    # Initialize the reference weights
-    model.init_ref_weight()
+    # Initialize the subject weights
+    model.init_subject_weight()
 
     ix = 0
     while True:
         ix += 1
         logging.info("Iteration: {:,}".format(ix))
-        # Recalculate the reference weight, given the naive alignment probabliities
-        model.recalc_ref_weight()
-        # Recalculate the alignment probabilities, given the reference weights
+        # Recalculate the subject weight, given the naive alignment probabliities
+        model.recalc_subject_weight()
+        # Recalculate the alignment probabilities, given the subject weights
         model.recalc_aln_prob()
 
         # Trim the least likely alignment for each read
