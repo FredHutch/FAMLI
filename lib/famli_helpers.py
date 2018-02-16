@@ -3,6 +3,7 @@
 import os
 import gzip
 import json
+import time
 import logging
 import argparse
 import numpy as np
@@ -65,10 +66,16 @@ class BLAST6Parser:
             len(self.unique_queries)))
 
 
+def recalc_subject_weight_worker(args):
+    """Calculate the new weight of a subject."""
+    query_weights, subject_len, subject_name = args
+    return subject_name, sum(query_weights) / subject_len
+
+
 class FAMLI_Reassignment:
     """Object to help with parsing alignments in BLAST 6 format."""
 
-    def __init__(self, alignments, subject_len):
+    def __init__(self, alignments, subject_len, pool=None):
         # Save the length of all subjects
         self.subject_len = subject_len
 
@@ -77,6 +84,12 @@ class FAMLI_Reassignment:
 
         # Keep track of the number of uniquely aligned queries
         self.n_unique = 0
+
+        # Pool of workers
+        if pool is None:
+            self.pool = Pool(4)
+        else:
+            self.pool = pool
 
         logging.info("Adding alignments to read re-assignment model")
         for query, subject, sstart, send, bitscore in alignments:
@@ -98,10 +111,9 @@ class FAMLI_Reassignment:
 
         # Keep track of the queries and subjects that will need to be updated
         self.subjects_to_update = set([])
-        self.queries_to_update = set([])
+        self.queries_to_update = set([self.bitscores.keys()])
 
         for query, bitscores in self.bitscores.items():
-            self.queries_to_update.add(query)
             if len(bitscores) == 1:
                 self.n_unique += 1
             bitscore_sum = sum(bitscores.values())
@@ -115,10 +127,24 @@ class FAMLI_Reassignment:
         """Recalculate the subject weights."""
         self.queries_to_update = set([])
 
-        for subject, length in self.subject_len.items():
-            if subject in self.subjects_to_update:
-                self.subject_weight[subject] = sum(self.aln_prob_T[subject].values()) / length
-                self.queries_to_update |= set(self.aln_prob_T[subject].keys())
+        self.queries_to_update = set([
+            query
+            for subject in self.subjects_to_update
+            for query in self.aln_prob_T[subject].keys()
+        ])
+
+        for subject, new_weight in self.pool.imap(
+            recalc_subject_weight_worker,
+            [
+                [
+                    self.aln_prob_T[subject].values(),
+                    self.subject_len[subject],
+                    subject
+                ]
+                for subject in self.subjects_to_update
+            ]
+        ):
+            self.subject_weight[subject] = new_weight
 
     def recalc_aln_prob(self):
         """Recalculate the alignment probabilities."""
@@ -282,7 +308,7 @@ def parse_alignment(align_handle,
     logging.info("FILTER 2: Reassign queries to a single subject")
 
     # Add the alignments to a model to optimally re-assign reads
-    model = FAMLI_Reassignment(alignments, parser.subject_len)
+    model = FAMLI_Reassignment(alignments, parser.subject_len, pool=pool)
 
     # Initialize the subject weights
     model.init_subject_weight()
@@ -410,6 +436,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    start_time = time.time()
+
     assert os.path.exists(args.input)
 
     # Set up logging
@@ -434,3 +462,6 @@ if __name__ == "__main__":
     if args.output:
         with open(args.output, "wt") as fo:
             json.dump(output, fo)
+
+    elapsed = round(time.time() - start_time, 2)
+    logging.info("Time elapsed: {:,}".format(elapsed))
