@@ -229,6 +229,8 @@ def parse_alignment(align_handle,
     BLAST 6 columns by default (in order): qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen slen
                                               0     1       2       3       4       5       6   7   8       9   10      11      12   13  
     """
+    # Initialize the multithreading pool before reading in the alignments
+    pool = Pool(threads)
 
     # Initialize the alignment parser
     parser = BLAST6Parser()
@@ -245,7 +247,6 @@ def parse_alignment(align_handle,
         alignments, parser.subject_len)
 
     # STEP 1. FILTER SUBJECTS BY "COULD" COVERAGE EVENNESS
-    pool = Pool(threads)
     logging.info("FILTER 1: Even coverage of all alignments")
 
     filter_1 = pool.map(filter_subjects_by_coverage, [
