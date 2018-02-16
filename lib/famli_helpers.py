@@ -301,12 +301,14 @@ def parse_alignment(align_handle,
         if n_trimmed == 0:
             break
 
+    logging.info("Subsetting the alignment to only the reassigned queries")
+
     # Subset the alignment to only the reassigned queries
     alignments = [
-        (query, subject, sstart, send, bitscore)
-        for query, subject, sstart, send, bitscore in alignments
-        if subject in model.aln_prob[query] and
-        len(model.aln_prob[query]) == 1
+        a
+        for a in alignments
+        if a[1] in model.aln_prob[a[0]] and
+        len(model.aln_prob[a[0]]) == 1
     ]
     queries_after_reassignment = len(alignments)
 
