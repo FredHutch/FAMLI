@@ -220,7 +220,7 @@ def parse_alignment(align_handle,
                     SEND_i=9,
                     BITSCORE_i=11,
                     SLEN_i=13,
-                    SD_MEAN_CUTOFF=2.0,
+                    SD_MEAN_CUTOFF=1.0,
                     STRIM_5=18,
                     STRIM_3=18,
                     threads=4):
