@@ -111,7 +111,7 @@ class FAMLI_Reassignment:
 
         # Keep track of the queries and subjects that will need to be updated
         self.subjects_to_update = set([])
-        self.queries_to_update = set([self.bitscores.keys()])
+        self.queries_to_update = set(self.bitscores.keys())
 
         for query, bitscores in self.bitscores.items():
             if len(bitscores) == 1:
@@ -205,35 +205,39 @@ class FAMLI_Reassignment:
 def filter_subjects_by_coverage(args):
     """Check whether the subject passes the coverage filter."""
 
-    cov, SD_MEAN_CUTOFF, STRIM_5, STRIM_3 = args
+    subject, cov, SD_MEAN_CUTOFF, STRIM_5, STRIM_3 = args
 
     # Trim the ends
     if cov.shape[0] >= STRIM_5 + STRIM_3 + 10:
         cov = cov[STRIM_5: -STRIM_3]
 
-    return cov.mean() > 0 and cov.std() / cov.mean() <= SD_MEAN_CUTOFF
+    passes_filter = cov.mean() > 0 and cov.std() / cov.mean() <= SD_MEAN_CUTOFF
+    return subject, passes_filter
 
 
 def calc_cov_by_subject(alignments, subject_len):
     """Index a set of sorted alignments by subject."""
     # The output will be a dict with the start:stop index for each subject
     index = {}
-    coverages = {}
+
+    coverages = {
+        subject: np.zeros(length, dtype=int)
+        for subject, length in subject_len.items()
+    }
+
     last_subject = None
     last_start_ix = None
     for ix, a in enumerate(alignments):
-        query, subject, sstart, send, bitstore = a
-        if subject != last_subject:
+        # query, subject, sstart, send, bitstore = a
+        if a[1] != last_subject:
             if last_subject is not None:
                 index[last_subject] = (last_start_ix, ix)
-            last_subject = subject
+            last_subject = a[1]
             last_start_ix = ix
 
-            # Initialize the coverages
-            coverages[subject] = np.zeros(subject_len[subject], dtype=int)
-        # Add to the coverage
-        coverages[subject][sstart:send] += 1
-    index[last_subject] = (last_start_ix, ix + 1)
+        # Add to the cov_proc
+        coverages[a[1]][a[2]:a[3]] += 1
+
     return coverages, index
 
 
@@ -277,6 +281,7 @@ def parse_alignment(align_handle,
 
     filter_1 = pool.map(filter_subjects_by_coverage, [
         [
+            subject,
             coverage,
             SD_MEAN_CUTOFF,
             STRIM_5,
@@ -286,7 +291,7 @@ def parse_alignment(align_handle,
     ])
 
     # Reformat as a dict
-    filter_1 = dict(zip(subject_coverages.keys(), filter_1))
+    filter_1 = dict(filter_1)
 
     logging.info("Subjects passing FILTER 1: {:,} / {:,}".format(
         sum(filter_1.values()), len(filter_1)
@@ -350,6 +355,7 @@ def parse_alignment(align_handle,
 
     filter_3 = pool.map(filter_subjects_by_coverage, [
         [
+            subject,
             coverage,
             SD_MEAN_CUTOFF,
             STRIM_5,
@@ -358,7 +364,7 @@ def parse_alignment(align_handle,
         for subject, coverage in subject_coverages.items()
     ])
     # Reformat as a dict
-    filter_3 = dict(zip(subject_index.keys(), filter_3))
+    filter_3 = dict(filter_3)
 
     logging.info("Subjects passing FILTER 3: {:,} / {:,}".format(
         sum(filter_3.values()), len(filter_3)
