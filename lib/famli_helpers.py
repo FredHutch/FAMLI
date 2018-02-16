@@ -347,6 +347,13 @@ def parse_alignment(align_handle,
     logging.info("Finished reassigning reads ({:,} remaining)".format(
         len(alignments)))
 
+    # Cull the subjects that were removed during FILTER 2
+    parser.subject_len = {
+        subject: length
+        for subject, length in parser.subject_len.items()
+        if subject in model.aln_prob_T
+    }
+
     # STEP 3: Filter subjects by even coverage of reassigned queries
     logging.info("FILTER 3: Filtering subjects by even sequencing coverage")
 
