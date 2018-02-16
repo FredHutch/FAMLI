@@ -1,1 +1,4 @@
 temp/
+tests/GCF*
+tests/diamond*
+*ipynb

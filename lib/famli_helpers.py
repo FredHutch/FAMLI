@@ -164,7 +164,7 @@ class FAMLI_Reassignment:
                     self.aln_prob[query][subject] = v
                     self.aln_prob_T[subject][query] = v
 
-    def trim_least_likely(self, cutoff=0.25):
+    def trim_least_likely(self):
         """Remove the least likely alignments."""
         n_trimmed = 0
         for query, aln_prob in self.aln_prob.items():
@@ -172,19 +172,15 @@ class FAMLI_Reassignment:
             if len(aln_prob) == 1:
                 continue
             # Find the best likelihood value to trim
-            max_p = np.median(list(aln_prob.values()))
-            if max_p > cutoff:
-                least_likely = cutoff
-            else:
-                least_likely = max_p
+            least_likely = np.median(list(aln_prob.values()))
+
+            if least_likely == 0.5:
+                continue
 
             to_remove = [
                 subject for subject, prob in aln_prob.items()
                 if prob <= least_likely
             ]
-            # Don't remove all of the subjects
-            if len(to_remove) == len(aln_prob):
-                continue
 
             n_trimmed += len(to_remove)
 
@@ -238,6 +234,8 @@ def calc_cov_by_subject(alignments, subject_len):
         # Add to the cov_proc
         coverages[a[1]][a[2]:a[3]] += 1
 
+    index[last_subject] = (last_start_ix, ix)
+
     return coverages, index
 
 
@@ -267,6 +265,10 @@ def parse_alignment(align_handle,
 
     # Read in the alignments
     alignments = [a for a in parser.parse(align_handle)]
+
+    # Count the total number of reads that were aligned
+    logging.info("Counting unique queries")
+    aligned_reads = len(set([a[0] for a in alignments]))
 
     # Sort alignments by subject
     logging.info("Sorting alignments by subject")
@@ -382,7 +384,7 @@ def parse_alignment(align_handle,
         a
         for subject, start_stop in subject_index.items()
         for a in alignments[start_stop[0]: start_stop[1]]
-        if filter_1[subject]
+        if filter_3[subject]
     ]
 
     logging.info("Queries passing FILTER 3: {:,} / {:,}".format(
@@ -428,7 +430,7 @@ def parse_alignment(align_handle,
         len(output),
     ))
 
-    return output
+    return aligned_reads, output
 
 
 if __name__ == "__main__":
@@ -467,14 +469,14 @@ if __name__ == "__main__":
 
     if args.input.endswith(".gz"):
         with gzip.open(args.input, "rt") as f:
-            output = parse_alignment(f, threads=args.threads)
+            aligned_reads, output = parse_alignment(f, threads=args.threads)
     else:
         with open(args.input, "rt") as f:
-            output = parse_alignment(f, threads=args.threads)
+            aligned_reads, output = parse_alignment(f, threads=args.threads)
 
     if args.output:
         with open(args.output, "wt") as fo:
-            json.dump(output, fo)
+            json.dump(output, fo, indent=4)
 
     elapsed = round(time.time() - start_time, 2)
     logging.info("Time elapsed: {:,}".format(elapsed))
