@@ -447,6 +447,10 @@ if __name__ == "__main__":
                         type=int,
                         help="""Number of processors to use.""",
                         default=4)
+    parser.add_argument("--logfile",
+                        type=str,
+                        help="""(Optional) Write log to this file.""")
+
 
     args = parser.parse_args()
 
@@ -460,6 +464,12 @@ if __name__ == "__main__":
     )
     rootLogger = logging.getLogger()
     rootLogger.setLevel(logging.INFO)
+
+    if args.logfile:
+        # Write to file
+        fileHandler = logging.FileHandler(args.logfile)
+        fileHandler.setFormatter(logFormatter)
+        rootLogger.addHandler(fileHandler)
 
     # Write to STDOUT
     consoleHandler = logging.StreamHandler()
