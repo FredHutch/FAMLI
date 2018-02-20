@@ -177,7 +177,7 @@ class FAMLI_Reassignment:
             # Trim anyone BELOW the maximum possible value for this query.
             to_remove = [
                 subject for subject, prob in aln_prob.items()
-                if prob < scale*max_likely
+                if prob < scale * max_likely
             ]
 
             n_trimmed += len(to_remove)
