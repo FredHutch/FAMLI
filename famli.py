@@ -136,13 +136,16 @@ if __name__ == "__main__":
 
         # Process the alignments, reassigning multi-mapped reads
         try:
-            aligned_reads, deduplicated_reads, abund = parse_alignment(
+            aligned_reads, abund = parse_alignment(
                 align_fp,
                 error_rate=args.error_rate,
                 genetic_code=args.query_gencode
             )
         except:
             exit_and_clean_up(temp_folder)
+
+        # Calculate the number of deduplicated reads
+        deduplicated_reads = sum([d["nreads"] for d in abund])
 
         # Name the output file based on the input file
         # Ultimately adding ".json.gz" to the input file name
