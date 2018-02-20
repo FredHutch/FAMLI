@@ -164,7 +164,7 @@ class FAMLI_Reassignment:
                     self.aln_prob[query][subject] = v
                     self.aln_prob_T[subject][query] = v
 
-    def trim_least_likely(self):
+    def trim_least_likely(self, scale=0.9):
         """Remove the least likely alignments."""
         n_trimmed = 0
         for query, aln_prob in self.aln_prob.items():
@@ -177,7 +177,7 @@ class FAMLI_Reassignment:
             # Trim anyone BELOW the maximum possible value for this query.
             to_remove = [
                 subject for subject, prob in aln_prob.items()
-                if prob < max_likely
+                if prob < scale*max_likely
             ]
 
             n_trimmed += len(to_remove)
