@@ -97,10 +97,10 @@ class FAMLI_Reassignment:
             self.bitscores[query][subject] = bitscore
 
     def init_subject_weight(self):
-        """Initialize the subject weights, all being equal."""
+        """Initialize the subject weights, equal and normalized to their length."""
         logging.info("Initializing subject weights")
         self.subject_weight = {
-            subject: 1 / length
+            subject: 1.0 / length
             for subject, length in self.subject_len.items()
         }
 
@@ -137,7 +137,7 @@ class FAMLI_Reassignment:
             recalc_subject_weight_worker,
             [
                 [
-                    self.aln_prob_T[subject].values(),
+                    list(self.aln_prob_T[subject].values()),
                     self.subject_len[subject],
                     subject
                 ]
@@ -171,15 +171,13 @@ class FAMLI_Reassignment:
             # Skip queries with only a single possible subject
             if len(aln_prob) == 1:
                 continue
-            # Find the best likelihood value to trim
-            least_likely = np.median(list(aln_prob.values()))
+            # Figure out our maximum score for this query
+            max_likely = max(list(aln_prob.values()))
 
-            if least_likely == 0.5:
-                continue
-
+            # Trim anyone BELOW the maximum possible value for this query.
             to_remove = [
                 subject for subject, prob in aln_prob.items()
-                if prob <= least_likely
+                if prob < max_likely
             ]
 
             n_trimmed += len(to_remove)
@@ -251,7 +249,8 @@ def parse_alignment(align_handle,
                     SD_MEAN_CUTOFF=1.0,
                     STRIM_5=18,
                     STRIM_3=18,
-                    threads=4):
+                    threads=4,
+                    MAX_ITERATIONS=1000):
     """
     Parse an alignment in BLAST6 format and determine which subjects are likely to be present. This is the core of FAMLI.
     BLAST 6 columns by default (in order): qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen slen
@@ -321,7 +320,7 @@ def parse_alignment(align_handle,
     model.init_subject_weight()
 
     ix = 0
-    while True:
+    while ix <= MAX_ITERATIONS:
         ix += 1
         logging.info("Iteration: {:,}".format(ix))
         # Recalculate the subject weight, given the naive alignment probabliities
