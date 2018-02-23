@@ -1,6 +1,8 @@
 # FAMLI
 Functional Analysis of Metagenomes by Likelihood Inference
 
+[![Docker Repository on Quay](https://quay.io/repository/fhcrc-microbiome/famli/status "Docker Repository on Quay")](https://quay.io/repository/fhcrc-microbiome/famli)
+
 Authors: 
 
   * Samuel Minot, Ph.D.
