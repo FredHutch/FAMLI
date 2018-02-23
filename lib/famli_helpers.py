@@ -113,6 +113,9 @@ class FAMLI_Reassignment:
         self.subjects_to_update = set([])
         self.queries_to_update = set(self.bitscores.keys())
 
+        # Keep track of the queryies that have multiple alignments
+        self.multimapped_queries = set(self.bitscores.keys())
+
         for query, bitscores in self.bitscores.items():
             if len(bitscores) == 1:
                 self.n_unique += 1
@@ -151,25 +154,30 @@ class FAMLI_Reassignment:
         self.subjects_to_update = set([])
 
         # Iterate over every query
-        for query, aln_prob in self.aln_prob.items():
-            if query in self.queries_to_update:
-                new_probs = [
-                    prob * self.subject_weight[subject]
-                    for subject, prob in aln_prob.items()
-                ]
-                new_probs_sum = sum(new_probs)
-                for ix, subject in enumerate(aln_prob):
-                    self.subjects_to_update.add(subject)
-                    v = new_probs[ix] / new_probs_sum
-                    self.aln_prob[query][subject] = v
-                    self.aln_prob_T[subject][query] = v
+        for query in self.queries_to_update:
+            aln_prob = self.aln_prob[query]
+            new_probs = [
+                prob * self.subject_weight[subject]
+                for subject, prob in aln_prob.items()
+            ]
+            new_probs_sum = sum(new_probs)
+            for ix, subject in enumerate(aln_prob):
+                self.subjects_to_update.add(subject)
+                v = new_probs[ix] / new_probs_sum
+                self.aln_prob[query][subject] = v
+                self.aln_prob_T[subject][query] = v
 
     def trim_least_likely(self, scale=0.9):
         """Remove the least likely alignments."""
+        logging.info("Removing alignments below {} of the max".format(scale))
         n_trimmed = 0
-        for query, aln_prob in self.aln_prob.items():
+        newly_unique_queries = set([])
+        for query in self.multimapped_queries:
+            aln_prob = self.aln_prob[query]
             # Skip queries with only a single possible subject
             if len(aln_prob) == 1:
+                newly_unique_queries.add(query)
+                self.n_unique += 1
                 continue
             # Figure out our maximum score for this query
             max_likely = max(list(aln_prob.values()))
@@ -188,7 +196,10 @@ class FAMLI_Reassignment:
                 del self.aln_prob_T[subject][query]
 
             if len(self.aln_prob[query]) == 1:
+                newly_unique_queries.add(query)
                 self.n_unique += 1
+
+        self.multimapped_queries = self.multimapped_queries - newly_unique_queries
 
         logging.info("Removed {:,} unlikely alignments".format(n_trimmed))
         logging.info("Number of uniquely aligned queries: {:,}".format(
