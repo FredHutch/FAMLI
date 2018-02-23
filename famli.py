@@ -34,13 +34,6 @@ if __name__ == "__main__":
                         type=str,
                         help="""Folder to place results.
                                 (Supported: s3://, or local path).""")
-    parser.add_argument("--overwrite",
-                        action="store_true",
-                        help="""Overwrite output files. Off by default.""")
-    parser.add_argument("--error-rate",
-                        type=float,
-                        default=0.001,
-                        help="Expected per-base sequencing error rate.")
     parser.add_argument("--min-score",
                         type=float,
                         default=20,
@@ -136,11 +129,10 @@ if __name__ == "__main__":
 
         # Process the alignments, reassigning multi-mapped reads
         try:
-            aligned_reads, abund = parse_alignment(
-                align_fp,
-                error_rate=args.error_rate,
-                genetic_code=args.query_gencode
-            )
+            with open(align_fp, "rt") as align_handle:
+                aligned_reads, abund = parse_alignment(
+                    align_handle,
+                )
         except:
             exit_and_clean_up(temp_folder)
 

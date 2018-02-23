@@ -81,9 +81,9 @@ def align_reads(read_fp,               # FASTQ file path
             "evalue", "bitscore",
             "qlen", "slen",
             "--min-score", str(min_score),  # Minimum alignment score
-            "--query-cover", "50",          # Minimum query coverage
+            "--query-cover", "95",          # Minimum query coverage
             "--id", "80",                   # Minimum alignment identity
-            "--max-target-seqs", "0",       # Report all alignments
+            "--top", "10",                  # Report alignments >10% from max
             "--block-size", str(blocks),    # Memory block size
             "--query-gencode",              # Genetic code
             str(query_gencode),

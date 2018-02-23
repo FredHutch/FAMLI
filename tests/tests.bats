@@ -34,15 +34,8 @@
   [[ "$h" =~ "PASSED TESTS" ]]
 }
 
-#@test "FAMLI error model" {
-#  h="$(python /usr/famli/lib/test_error_model_famli.py)"
-#
-#  [[ "$h" =~ "PASSED TESTS" ]]
-#}
-#
-#@test "FAMLI integration tests" {
-#  h="$(python /usr/famli/tests/integration_tests.py)"
-#
-#  [[ "$h" =~ "PASSED TESTS" ]]
-#}
-#
+@test "FAMLI integration tests" {
+  h="$(python /usr/famli/tests/integration_tests.py)"
+
+  [[ "$h" =~ "PASSED TESTS" ]]
+}
