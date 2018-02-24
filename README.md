@@ -28,15 +28,16 @@ We developed a method to iteratively assign shared reads to the most likely true
 
   1. In peptides that are truly positive in the sample, there should be relatively even sequence 
   coverage across the length of the peptide. 
-Present:
-  C:23445432
+ Present:
+ 
+` C:23445432
     ||||||||
-  P:--------
+  P:--------`
 
 Not present, but with a shared domain with a peptide that is present:
-  C:23445432000000000000
+`  C:23445432000000000000
     ||||||||
-  P:--------------------
+  P:--------------------`
 
   2. We can use the total depth of coverage for a peptide (normalized to the peptide length) to 
   iteratively reassign multiply aligned sequences to the more likely peptide to be present
@@ -56,9 +57,9 @@ Not present, but with a shared domain with a peptide that is present:
 
 Here are some examples:
 
-  * If reads align to reference A and reference B, but there is _uneven_ depth for reference A but relatively even depth across reference B, then reference A is **removed from the candidate list**
+  * If reads align to reference A and reference B, but **there is _uneven_ depth for reference A** but relatively even depth across reference B, then reference A is **removed from the candidate list**
 
-  * If read #1 aligns equally-well to reference A and reference C, but there is _2x more_ length normalized read depth for reference A as compared to reference B across the entire sample, then **reference C's alignment is removed from the list of candidates for read #1**.
+  * If read #1 aligns equally-well to reference A and reference C, but **there is _2x more_ length normalized read depth for reference A as compared to reference C** across the entire sample, then **reference C's alignment is removed from the list of candidates for read #1**.
 
 
 ### Math
@@ -71,33 +72,34 @@ This is considered on a per-reference basis. On a per-amino-acid basis, alignmen
 
 *Likelihood (L)*
 
-Let us consider the likelihood that a given query *i* is truly from a given reference *j* *given all of the evidence from all of the queries in a sample.* For the terms of this discussion, we will describe this as the *likelihood* (L*ij*) for a given assignment. 
+Let us consider the likelihood that a given query *i* is truly from a given reference *j* given all of the evidence from all of the queries in a sample. For the terms of this discussion, we will describe this as the **likelihood** (L<sub>ij</sub>) for a given assignment. 
 
-Each alignment has a quality score; for our application here we use the bitscore--an integrated consideration of the alignment length, number of mismatches, gaps, and overhangs. 
+Each alignment has a quality score; for our application here we use the **bitscore**--an integrated consideration of the alignment length, number of mismatches, gaps, and overhangs. 
 
-Therefore, we can use the bitscore of an alignment divided by the sum of bitscores for all the alignments for a given query sequence as a normalized weight:
+Therefore, we can use the bitscore of an alignment divided by the sum of bitscores for all the alignments for a given query sequence as a **normalized weight** W<sub>ij</sub>:
 
-W*ij* = Bitscore*i* / Sum(Bitscore*ij* for all *j*) 
+W<sub>ij</sub> = Bitscore<sub>i</sub> / Sum(Bitscore<sub>ij</sub> for all *j*) 
 
-Next, we calculate the total weight for every reference *j*
+Next, we calculate the **total weight** for every reference *j*, **TOT<sub>j</sub>**
 
-TOT*j* = sum(W*ij* for all *i*)
+TOT<sub>j</sub> = sum(W<sub>ij</sub> for all *i*)
 
-Finally, we calculate the likelihood that any individual query *i* is truly derived from a query *j*
+Finally, we calculate the likelihood that any individual query *i* is truly derived from a reference *j*, **L<sub>ij</sub>**
 
-L*ij* = W*ij* * TOT*j*
+L<sub>ij</sub> = W<sub>ij</sub> * TOT<sub>j*
 
-The maximum likelihood for query i is determined Lmax*i* = max(L*ij* for all *j*). 
+The **maximum likelihood for query i**, Lmax<sub>i</sub> is determined 
+Lmax<sub>i</sub> = max(L<sub>ij</sub> for all *j*). 
 
-If the L*ij* falls below the scaled maximum likelihood for query i, the alignment is removed from consideration:
+If the L<sub>ij</sub> falls below the scaled maximum likelihood for query *i*, the alignment is removed from consideration:
 
-For all i, 
-if L*ij* < scale*Lmax*i*, Bitscore*ij* 
-then L*ij* is set to zero.
+For all query *i*, 
+if L<sub>ij</sub> < scale * Lmax<sub>i</sub>, 
+then Bitscore<sub>ij</sub> is set to zero.
 
-By default the scale here is set to 0.9 (or 90% of the maximum likelihood for query i).
+By default the scale here is set to 0.9 (or 90% of the maximum likelihood for query *i*).
 
-This process (recalculate W*ij*, calculate the TOT*j* for each refrence *j*, and then calculate a L*ij* using the new W*ij* and TOT*j*) is repeated iteratively until no more alignments are culled or a maximum number of iterations is reached. 
+This process (recalculate W<sub>ij</sub>, calculate the TOT<sub>j</sub> for each refrence *j*, and then calculate a L<sub>ij</sub> using the new W<sub>ij</sub> and TOT<sub>j</sub>) is repeated iteratively until no more alignments are culled or a maximum number of iterations is reached. 
 
 
 ### Implementation
