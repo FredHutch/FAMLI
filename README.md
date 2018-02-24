@@ -17,104 +17,67 @@ is that of 'multi-mapping' reads – short nucleotide sequences that are equall
 two different reference protein sequences. In other domains such multi-mapping reads can
 be dealt with in a variety of ways. For example, in the realm of taxonomic identification
 it can be appropriate to assign them to the lowest common ancestor (LCA) of both references. 
+
 However in the case of mapping short reads to a database of protein sequences we can not
-assume that there is an underlying taxonomic structure to support such aggregation. Instead,
-we can use the following simplifying assumptions to address this problem in a more general
-manner. 
+assume that there is an underlying directed acyclic graph structure. Peptides
+can evolve by duplication events, homologous recombination, and other means of sharing highly conserved
+domains (leading to shared short reads). If one simply includes all peptides for which there is a read, we find the false positives outnumber the true positive by as much as 1000:1. 
+
+We developed a method to iteratively assign shared reads to the most likely true peptides, bringing the precision (TP / (TP+FP)) to close to 90%. To do so, we used the following principles:
 
 
-  1. All reference sequences contain some amount of unique amino acid sequence
-  2. References can only be detected when they have been sequenced across such a unique region
-  3. Errors in genome sequencing are distributed randomly
+  1. In peptides that are truly positive in the sample, there should be relatively even sequence 
+  coverage across the length of the peptide. 
+Present:
+  C:23445432
+    ||||||||
+  P:--------
 
+Not present, but with a shared domain with a peptide that is present:
+  C:23445432000000000000
+    ||||||||
+  P:--------------------
 
-NB: The third assumption is more true for Illumina sequencing chemistry, and notably not
-true for PacBio or MinION sequencing, which seem to have clustered or homopolymer-related
-errors
-
+  2. We can use the total depth of coverage for a peptide (normalized to the peptide length) to 
+  iteratively reassign multiply aligned sequences to the more likely peptide to be present
 
 ### Approach
 
-The approach that we use here is to reassign multi-mapping reads to the most likely reference
-sequence that it aligns to, while taking into account the potential for mis-mapping due to
-random sequencing error. Operationally, this consists of the following steps:
-
-
-  1. Map all input nucleotide reads in amino acid space against a reference database
-  2. Use the user-supplied nucleotide error rate and the user-supplied genetic code to
-  compute the expected rate of amino acid substitutions due to random nucleotide error
-  3. Calculate the total likelihood mass for each reference, which is the sum of the likelihoods
-  that each individual read is truly derived from that reference (given the relative alignment
-  score, the amino acid substitution rate, the length of the sequence, and the binomial distribution)
-  4. Assign each read to a single reference, using the total likelihood mass for that reference
-  and the computed probability for the single alignment.
-  5. Calculate summary statistics for the coverage and abundance of each reference using the
-  deduplicated set of reads
-
+  1. Align all input nucleotide reads in amino acid space against a reference database.
+  2. Filter out all recruited reference sequences with highly uneven coverage (assuming all
+  possible aligning sequences are truly from this peptide):
+  Standard deviation / Mean of coverage depth per amino acid of the peptide > 1.0
+  3. Iteratively, until no further references are pruned: 
+  i) NORMALIZATION: For sequences that align to multiple possible reference sequences, weight the alignment quality
+  (bitscore) by the length-normalized total alignment quality for each candidate reference peptide. 
+  ii) PRUNING. Remove from the candidate reference sequences for this sequence all references with 
+  weighted alignment scores less than 90% of the maximum for this sequence. 
+  4. Filter out all recruited reference sequences with highly uneven coverage after pruning of references in step 3.
 
 Here are some examples:
 
-  * If read #1 aligns equally well to reference A and reference B, but there is _2x more_ evidence
-  for reference A across the entire sample, then read #1 gets **assigned to reference A**
+  * If reads align to reference A and reference B, but there is _uneven_ depth for reference A but relatively even depth across reference B, then reference A is **removed from the candidate list**
 
-  * If read #1 aligns equally well to reference A and reference B, but there is _equal_ evidence
-  for reference A across the entire sample, then read #1 is **not assigned to any reference**
-  (see assumption 2 above)
-
-  * If read #1 aligns to reference A with 0 mismatches and reference B with 1 mismatch, but there
-  is _1,000x more_ evidence for reference B across the entire sample, then read #1 gets
-  **assigned to reference B**
-
-  * If read #1 aligns to reference A with 0 mismatches and reference B with 1 mismatch, but there
-  is _equal_ evidence for reference A and reference B across the entire sample, then read #1 gets
-  **assigned to reference A**
+  * If read #1 aligns equally-well to reference A and reference C, but there is _2x more_ length normalized read depth for reference A as compared to reference B across the entire sample, then **reference C's alignment is removed from the list of candidates for read #1**.
 
 
 ### Math
 
-#### Defining the effective amino acid substitution rate
-
-*Terms:*
-  * Amino acid error rate (Eaa)
-  * Nucleotide error rate (Enuc)
-  * Number of possible non-synonymous nucleotide errors (N-nonsyn)
-  * Number of possible nucleotide errors (N-total)
-
-**Eaa = Enuc * 3 * N-nonsyn / N-total**
+#### Coverage Evenness
+This is considered on a per-reference basis. On a per-amino-acid basis, alignment-depth is calculated using an integer vector. It is expected that the 5' and 3' ends of the reference will have trail offs, thus the vector is trimmed on both the 5' and 3' ends. A mean coverage depth and the standard deviation of the mean are calculated. The standard deviation is divided by the mean. Both based on the Poisson distribution and some empirical efforts on our part, we set a threshold of 1.0 for this ratio as a cutoff of uneveness; references with SD / MEAN ratio > 1.0 are filtered. 
 
 #### Defining alignment likelihood
 
-Consider a set of *i* nucleotide sequences being aligned against a set of *j* protein reference sequences.
-
-
-*Edit distance (ED)*
-
-The quality of each alignment can be quantified with an alignment score (AS) in which larger
-values indicate a higher quality alignment. The edit distance (ED) for each alignment is calculated as 
-
-ED*ij* = max(AS*i*) - AS*ij*
-
-Where AS*i* is the set of all alignment scores for query *i* and AS*ij* is the alignment score for query
-*i* against reference *j*.
 
 *Likelihood (L)*
 
-Let us consider two types of likelihood, the likelihood that a given query is truly from a given reference
-*given only the evidence from that single query*, and the likelihood that a given query is truly from a 
-given reference *given all of the evidence from all of the queries in a sample.* For the terms of this
-discussion, we will describe the first (likelihood based on the evidence from a single read) as the *weight*
-(W*ij*) for a given assignment, and the second (likelihood based on the evidence from the entire sample) as 
-the *likelihood* (L*ij*) for a given assignment. 
+Let us consider the likelihood that a given query *i* is truly from a given reference *j* *given all of the evidence from all of the queries in a sample.* For the terms of this discussion, we will describe this as the *likelihood* (L*ij*) for a given assignment. 
 
-To calculate the weight, we use a binomial distribution to calculate the probability that the observed number
-of amino acid substitutions would occur due to random chance, given a query sequence of a given length and an 
-expected amino acid error rate. Note that this is additive with the probability that a *larger* number of
-substitutions would occur due to random sequencing error. That metric, based on the binomial distribution
-is depicted here as B(LENGTH*i*, AS*ij*, Eaa)
+Each alignment has a quality score; for our application here we use the bitscore--an integrated consideration of the alignment length, number of mismatches, gaps, and overhangs. 
 
-The weight for each alignment is therefore calculated as:
+Therefore, we can use the bitscore of an alignment divided by the sum of bitscores for all the alignments for a given query sequence as a normalized weight:
 
-W*ij* = B(LENGTH*i*, AS*ij*, Eaa)
+W*ij* = Bitscore*i* / Sum(Bitscore*ij* for all *j*) 
 
 Next, we calculate the total weight for every reference *j*
 
@@ -124,23 +87,30 @@ Finally, we calculate the likelihood that any individual query *i* is truly deri
 
 L*ij* = W*ij* * TOT*j*
 
-A query is assigned to a single reference sequence when the condition L*ij* == max(L*ij* for all *j*)
-is satisfied for a single query *j*. 
+The maximum likelihood for query i is determined Lmax*i* = max(L*ij* for all *j*). 
 
-NB: The only cases in which a query can not be assigned to a single reference is the case in which either
-(a) the reference sequence does not contain any unique amino acid sequence, or (b) the sample has not been
-sequenced to sufficient depth to detect any of that unique sequence.
+If the L*ij* falls below the scaled maximum likelihood for query i, the alignment is removed from consideration:
+
+For all i, 
+if L*ij* < scale*Lmax*i*, Bitscore*ij* 
+then L*ij* is set to zero.
+
+By default the scale here is set to 0.9 (or 90% of the maximum likelihood for query i).
+
+This process (recalculate W*ij*, calculate the TOT*j* for each refrence *j*, and then calculate a L*ij* using the new W*ij* and TOT*j*) is repeated iteratively until no more alignments are culled or a maximum number of iterations is reached. 
+
 
 ### Implementation
 
 **Aligner**: For alignment of nucleotide sequences against a protein database, we are currently using
-(Paladin)[https://github.com/twestbrookunh/paladin], which is a similar algorithm to BWA-MEM and
-attempts to align the entire read, rather than performing a local alignment (such as BLAST or DIAMOND).
+(DIAMOND)[https://github.com/bbuchfink/diamond]. We specifically ran DIAMOND with the following alignment options:
+--query-cover 90
+--min-score 20
+--top 10
+--id 80
 
-**Alignment score**: The alignment score for each alignment is encoded in the BAM tag field as `AS:i:<INT>`.
+**Alignment score**: We use bitscores as calculated by DIAMOND as an integrated assessment of alignment quality (considering alignment length, gaps, mismatches, and query sequence quality).
 
-**Error model**: The amino acid error model being used is the binomial distribution (`scipy.stats.binom`), which takes
-into account both the length of the query sequence and the expected amino acid substitution rate.
 
 ### Wrapper Script
 
