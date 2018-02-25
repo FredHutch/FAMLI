@@ -79,25 +79,25 @@ For our application here we use the **bitscore**--an integrated consideration of
 
 W can use the bitscore of an alignment divided by the sum of bitscores for all the alignments for a given query sequence as a **normalized weight** W<sub>ij</sub>. 
 
-`W<sub>ij</sub> = Bitscore<sub>ij</sub> / Sum(Bitscore<sub>ij</sub> for all *j*) `
+>W<sub>ij</sub> = Bitscore<sub>ij</sub> / Sum(Bitscore<sub>ij</sub> for all *j*) 
 
 Next, we calculate the **total weight** for every reference *j*, **TOT<sub>j</sub>**
 
-`TOT<sub>j</sub> = sum(W<sub>ij</sub> for all *i*)`
+>TOT<sub>j</sub> = sum(W<sub>ij</sub> for all *i*)
 
 Finally, we calculate the likelihood that any individual query *i* is truly derived from a reference *j*, **L<sub>ij</sub>**
 
-`L<sub>ij</sub> = W<sub>ij</sub> * TOT<sub>j*`
+>L<sub>ij</sub> = W<sub>ij</sub> * TOT<sub>j*
 
 The **maximum likelihood for query i**, Lmax<sub>i</sub> is determined 
-`Lmax<sub>i</sub> = max(L<sub>ij</sub> for all *j*).`
+>Lmax<sub>i</sub> = max(L<sub>ij</sub> for all *j*).
 
 If the L<sub>ij</sub> falls below the scaled maximum likelihood for query *i*, the alignment is removed from consideration:
-```
-For all query *i*, 
-if L<sub>ij</sub> < scale * Lmax<sub>i</sub>, 
-then Bitscore<sub>ij</sub> is set to zero.
-```
+
+>For all query *i*, 
+>if L<sub>ij</sub> < scale * Lmax<sub>i</sub>, 
+>then Bitscore<sub>ij</sub> is set to zero.
+
 
 By default the scale here is set to 0.9 (or 90% of the maximum likelihood for query *i*).
 
