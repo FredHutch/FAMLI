@@ -30,14 +30,18 @@ We developed a method to iteratively assign shared reads to the most likely true
   coverage across the length of the peptide. 
  Present:
  
-` C:23445432
+```
+  C:23445432
     ||||||||
-  P:--------`
+  P:--------
+```
 
 Not present, but with a shared domain with a peptide that is present:
-`  C:23445432000000000000
+```
+   C:23445432000000000000
     ||||||||
-  P:--------------------`
+  P:--------------------
+```
 
   2. We can use the total depth of coverage for a peptide (normalized to the peptide length) to 
   iteratively reassign multiply aligned sequences to the more likely peptide to be present
@@ -57,45 +61,43 @@ Not present, but with a shared domain with a peptide that is present:
 
 Here are some examples:
 
-  * If reads align to reference A and reference B, but **there is _uneven_ depth for reference A** but relatively even depth across reference B, then reference A is **removed from the candidate list**
+  * For reference A and reference B that both have some aligning query reads, if **there is _uneven_ depth for reference A** but relatively even depth across reference B, then **reference A is removed from the candidate list** while reference B is kept as a candidate.
 
-  * If read #1 aligns equally-well to reference A and reference C, but **there is _2x more_ length normalized read depth for reference A as compared to reference C** across the entire sample, then **reference C's alignment is removed from the list of candidates for read #1**.
+  * If **read #1 aligns equally-well to reference A and reference C**, but **there is _2x more_ length normalized read depth for reference A as compared to reference C** across the entire sample, then **reference C's alignment is removed from the list of candidates for read #1**.
 
 
 ### Math
 
 #### Coverage Evenness
-This is considered on a per-reference basis. On a per-amino-acid basis, alignment-depth is calculated using an integer vector. It is expected that the 5' and 3' ends of the reference will have trail offs, thus the vector is trimmed on both the 5' and 3' ends. A mean coverage depth and the standard deviation of the mean are calculated. The standard deviation is divided by the mean. Both based on the Poisson distribution and some empirical efforts on our part, we set a threshold of 1.0 for this ratio as a cutoff of uneveness; references with SD / MEAN ratio > 1.0 are filtered. 
+This is considered on a per-reference basis. On a per-amino-acid basis, alignment-depth is calculated using an integer vector. It is expected that the 5' and 3' ends of the reference will have trail offs, thus the vector is trimmed on both the 5' and 3' ends. A mean coverage depth and the standard deviation of the mean are calculated. The standard deviation is divided by the mean. Both based on the Poisson distribution and some empirical efforts on our part, we set a threshold of 1.0 for this ratio as a cutoff of uneveness; **references with SD / MEAN ratio > 1.0 are filtered**. 
 
 #### Defining alignment likelihood
 
+Let us consider the **likelihood that a given query i is truly from a given reference j** considering all of the evidence from all of the queries in a sample. For the terms of this discussion, we will describe this as the **likelihood** (L<sub>ij</sub>) for a given assignment. 
 
-*Likelihood (L)*
+For our application here we use the **bitscore**--an integrated consideration of the alignment length, number of mismatches, gaps, and overhangs--as a way of comparing alignment quality for weighting: Bitscore<sub>ij</sub> is the quality of the alignment of query read *i* to reference *j*.
 
-Let us consider the likelihood that a given query *i* is truly from a given reference *j* given all of the evidence from all of the queries in a sample. For the terms of this discussion, we will describe this as the **likelihood** (L<sub>ij</sub>) for a given assignment. 
+W can use the bitscore of an alignment divided by the sum of bitscores for all the alignments for a given query sequence as a **normalized weight** W<sub>ij</sub>. 
 
-Each alignment has a quality score; for our application here we use the **bitscore**--an integrated consideration of the alignment length, number of mismatches, gaps, and overhangs. 
-
-Therefore, we can use the bitscore of an alignment divided by the sum of bitscores for all the alignments for a given query sequence as a **normalized weight** W<sub>ij</sub>:
-
-W<sub>ij</sub> = Bitscore<sub>i</sub> / Sum(Bitscore<sub>ij</sub> for all *j*) 
+`W<sub>ij</sub> = Bitscore<sub>ij</sub> / Sum(Bitscore<sub>ij</sub> for all *j*) `
 
 Next, we calculate the **total weight** for every reference *j*, **TOT<sub>j</sub>**
 
-TOT<sub>j</sub> = sum(W<sub>ij</sub> for all *i*)
+`TOT<sub>j</sub> = sum(W<sub>ij</sub> for all *i*)`
 
 Finally, we calculate the likelihood that any individual query *i* is truly derived from a reference *j*, **L<sub>ij</sub>**
 
-L<sub>ij</sub> = W<sub>ij</sub> * TOT<sub>j*
+`L<sub>ij</sub> = W<sub>ij</sub> * TOT<sub>j*`
 
 The **maximum likelihood for query i**, Lmax<sub>i</sub> is determined 
-Lmax<sub>i</sub> = max(L<sub>ij</sub> for all *j*). 
+`Lmax<sub>i</sub> = max(L<sub>ij</sub> for all *j*).`
 
 If the L<sub>ij</sub> falls below the scaled maximum likelihood for query *i*, the alignment is removed from consideration:
-
+```
 For all query *i*, 
 if L<sub>ij</sub> < scale * Lmax<sub>i</sub>, 
 then Bitscore<sub>ij</sub> is set to zero.
+```
 
 By default the scale here is set to 0.9 (or 90% of the maximum likelihood for query *i*).
 
@@ -106,10 +108,12 @@ This process (recalculate W<sub>ij</sub>, calculate the TOT<sub>j</sub> for each
 
 **Aligner**: For alignment of nucleotide sequences against a protein database, we are currently using
 (DIAMOND)[https://github.com/bbuchfink/diamond]. We specifically ran DIAMOND with the following alignment options:
+```
 --query-cover 90
 --min-score 20
 --top 10
 --id 80
+```
 
 **Alignment score**: We use bitscores as calculated by DIAMOND as an integrated assessment of alignment quality (considering alignment length, gaps, mismatches, and query sequence quality).
 
