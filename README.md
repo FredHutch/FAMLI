@@ -38,7 +38,7 @@ We developed a method to iteratively assign shared reads to the most likely true
 
 Not present, but with a shared domain with a peptide that is present:
 ```
-   C:23445432000000000000
+  C:23445432000000000000
     ||||||||
   P:--------------------
 ```
@@ -69,7 +69,7 @@ Here are some examples:
 ### Math
 
 #### Coverage Evenness
-This is considered on a per-reference basis. On a per-amino-acid basis, alignment-depth is calculated using an integer vector. It is expected that the 5' and 3' ends of the reference will have trail offs, thus the vector is trimmed on both the 5' and 3' ends. A mean coverage depth and the standard deviation of the mean are calculated. The standard deviation is divided by the mean. Both based on the Poisson distribution and some empirical efforts on our part, we set a threshold of 1.0 for this ratio as a cutoff of uneveness; **references with SD / MEAN ratio > 1.0 are filtered**. 
+This is considered on a per-reference basis. On a per-amino-acid basis, alignment-depth is calculated using an integer vector. It is expected that the 5' and 3' ends of the reference will have trail offs, thus the vector is trimmed on both the 5' and 3' ends. A mean coverage depth and the standard deviation of the mean are calculated. The standard deviation is divided by the mean. Both based on the Poisson distribution and some empirical efforts on our part, we set a threshold of 1.0 for this ratio as a cutoff of uneveness; **references with a coverage SD / MEAN ratio > 1.0 are filtered**. 
 
 #### Defining alignment likelihood
 
@@ -85,14 +85,14 @@ Next, we calculate the **total weight** for every reference *j*, **TOT<sub>j</su
 
 >TOT<sub>j</sub> = sum(W<sub>ij</sub> for all *i*)
 
-Finally, we calculate the likelihood that any individual query *i* is truly derived from a reference *j*, **L<sub>ij</sub>**
+Finally, we calculate the **likelihood** that any individual query *i* is truly derived from a reference *j*, **L<sub>ij</sub>**
 
 >L<sub>ij</sub> = W<sub>ij</sub> * TOT<sub>j*
 
 The **maximum likelihood for query i**, Lmax<sub>i</sub> is determined 
 >Lmax<sub>i</sub> = max(L<sub>ij</sub> for all *j*).
 
-If the L<sub>ij</sub> falls below the scaled maximum likelihood for query *i*, the alignment is removed from consideration:
+If the L<sub>ij</sub> falls below the scaled maximum likelihood for query *i*, the **alignment is removed from consideration**:
 
 >For all query *i*, 
 >if L<sub>ij</sub> < scale * Lmax<sub>i</sub>, 
@@ -101,7 +101,7 @@ If the L<sub>ij</sub> falls below the scaled maximum likelihood for query *i*, t
 
 By default the scale here is set to 0.9 (or 90% of the maximum likelihood for query *i*).
 
-This process (recalculate W<sub>ij</sub>, calculate the TOT<sub>j</sub> for each refrence *j*, and then calculate a L<sub>ij</sub> using the new W<sub>ij</sub> and TOT<sub>j</sub>) is repeated iteratively until no more alignments are culled or a maximum number of iterations is reached. 
+This process (recalculate W<sub>ij</sub>, calculate the TOT<sub>j</sub> for each refrence *j*, and then calculate a L<sub>ij</sub> using the new W<sub>ij</sub> and TOT<sub>j</sub>) is **repeated iteratively until no more alignments are culled** or a maximum number of iterations is reached. 
 
 
 ### Implementation
