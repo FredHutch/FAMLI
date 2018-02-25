@@ -107,7 +107,7 @@ This process (recalculate W<sub>ij</sub>, calculate the TOT<sub>j</sub> for each
 ### Implementation
 
 **Aligner**: For alignment of nucleotide sequences against a protein database, we are currently using
-(DIAMOND)[https://github.com/bbuchfink/diamond]. We specifically ran DIAMOND with the following alignment options:
+DIAMOND [https://github.com/bbuchfink/diamond]. We specifically ran DIAMOND with the following alignment options:
 ```
 --query-cover 90
 --min-score 20
