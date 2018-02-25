@@ -89,7 +89,7 @@ Finally, we calculate the **likelihood** that any individual query *i* is truly 
 
 >L<sub>ij</sub> = W<sub>ij</sub> * TOT<sub>j*
 
-The **maximum likelihood for query i**, Lmax<sub>i</sub> is determined 
+The **maximum likelihood for query i, Lmax<sub>i</sub>** is determined 
 >Lmax<sub>i</sub> = max(L<sub>ij</sub> for all *j*).
 
 If the L<sub>ij</sub> falls below the scaled maximum likelihood for query *i*, the **alignment is removed from consideration**:
