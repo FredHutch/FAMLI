@@ -14,12 +14,12 @@ Authors:
 The goal of this work is to improve the accuracy of identifying protein-coding sequences
 from short-read shotgun metagenomic sequencing data. The core challenge we consider here
 is that of 'multi-mapping' reads – short nucleotide sequences that are equally similar to
-two different reference protein sequences. In other domains such multi-mapping reads can
+multiple different reference protein sequences. In other domains such multi-mapping reads can
 be dealt with in a variety of ways. For example, in the realm of taxonomic identification
 it can be appropriate to assign them to the lowest common ancestor (LCA) of both references. 
 
-However in the case of mapping short reads to a database of protein sequences we can not
-assume that there is an underlying directed acyclic graph structure. Peptides
+However in the case of mapping short reads to a database of protein sequences (or peptides) we can not
+assume that there is an underlying directed acyclic graph structure (e.g. a taxonomy). Peptides
 can evolve by duplication events, homologous recombination, and other means of sharing highly conserved
 domains (leading to shared short reads). If one simply includes all peptides for which there is a read, we find the false positives outnumber the true positive by as much as 1000:1. 
 
@@ -28,6 +28,7 @@ We developed a method to iteratively assign shared reads to the most likely true
 
   1. In peptides that are truly positive in the sample, there should be relatively even sequence 
   coverage across the length of the peptide. 
+ 
  Present:
  
 ```
@@ -43,12 +44,12 @@ Not present, but with a shared domain with a peptide that is present:
   P:--------------------
 ```
 
-  2. We can use the total depth of coverage for a peptide (normalized to the peptide length) to 
+  2. We use the total depth of coverage for a peptide (normalized to the peptide length) to 
   iteratively reassign multiply aligned sequences to the more likely peptide to be present
 
 ### Approach
 
-  1. Align all input nucleotide reads in amino acid space against a reference database.
+  1. Align all input nucleotide reads in amino acid space against a reference database of peptides.
   2. Filter out all recruited reference sequences with highly uneven coverage (assuming all
   possible aligning sequences are truly from this peptide):
   Standard deviation / Mean of coverage depth per amino acid of the peptide > 1.0
@@ -61,15 +62,23 @@ Not present, but with a shared domain with a peptide that is present:
 
 Here are some examples:
 
-  * For reference A and reference B that both have some aligning query reads, if **there is _uneven_ depth for reference A** but relatively even depth across reference B, then **reference A is removed from the candidate list** while reference B is kept as a candidate.
+  * For reference A and reference B that both have some aligning query reads, if **there is _uneven_ depth for reference A** 
+  but relatively even depth across reference B, then **reference A is removed from the candidate list** while reference B 
+  is kept as a candidate.
 
-  * If **read #1 aligns equally-well to reference A and reference C**, but **there is _2x more_ length normalized read depth for reference A as compared to reference C** across the entire sample, then **reference C's alignment is removed from the list of candidates for read #1**.
+  * If **read #1 aligns equally-well to reference A and reference C**, but **there is _2x more_ read depth for reference A as 
+  compared to reference C** across the entire sample, then **reference C's alignment is removed from the list of candidates 
+  for read #1**.
 
 
 ### Math
 
 #### Coverage Evenness
-This is considered on a per-reference basis. On a per-amino-acid basis, alignment-depth is calculated using an integer vector. It is expected that the 5' and 3' ends of the reference will have trail offs, thus the vector is trimmed on both the 5' and 3' ends. A mean coverage depth and the standard deviation of the mean are calculated. The standard deviation is divided by the mean. Both based on the Poisson distribution and some empirical efforts on our part, we set a threshold of 1.0 for this ratio as a cutoff of uneveness; **references with a coverage SD / MEAN ratio > 1.0 are filtered**. 
+This is considered on a per-reference basis. On a per-amino-acid basis, alignment-depth is calculated using an integer vector. 
+It is expected that the 5' and 3' ends of the reference will have trail offs, thus the vector is trimmed on both the 5' and 3' 
+ends. A mean coverage depth and the standard deviation of the mean are calculated. The standard deviation is divided by the 
+mean. Both based on the Poisson distribution and some empirical efforts on our part, we set a threshold of 1.0 for this ratio 
+as a cutoff of uneveness; **references with a coverage SD / MEAN ratio > 1.0 are filtered**. 
 
 #### Defining alignment likelihood
 
@@ -101,7 +110,9 @@ If the L<sub>ij</sub> falls below the scaled maximum likelihood for query *i*, t
 
 By default the scale here is set to 0.9 (or 90% of the maximum likelihood for query *i*).
 
-This process (recalculate W<sub>ij</sub>, calculate the TOT<sub>j</sub> for each refrence *j*, and then calculate a L<sub>ij</sub> using the new W<sub>ij</sub> and TOT<sub>j</sub>) is **repeated iteratively until no more alignments are culled** or a maximum number of iterations is reached. 
+This process (recalculate W<sub>ij</sub>, calculate the TOT<sub>j</sub> for each refrence *j*, and then calculate a 
+L<sub>ij</sub> using the new W<sub>ij</sub> and TOT<sub>j</sub>) is **repeated iteratively until no more alignments 
+are culled** or a maximum number of iterations is reached. 
 
 
 ### Implementation
