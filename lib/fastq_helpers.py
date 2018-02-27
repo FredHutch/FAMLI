@@ -25,7 +25,7 @@ def get_reads_from_url(
     cleaned_reads_folder = os.path.join(temp_folder, "cleaned_reads")
 
     # Quality trimmed reads go into $temp_folder/trimmed_reads/
-    trimmed_reads_folder = os.path.join(temp_folder, "cleaned_reads")
+    trimmed_reads_folder = os.path.join(temp_folder, "trimmed_reads")
 
     for folder in [
         fetched_reads_folder, cleaned_reads_folder, trimmed_reads_folder
@@ -88,7 +88,7 @@ def get_reads_from_url(
         # Quality trim the FASTQ
         logging.info("Quality trimming the FASTQ (Q{})".format(min_qual))
         trimmed_path = quality_trim(
-            local_path,
+            cleaned_path,
             trimmed_reads_folder,
             min_qual
         )
@@ -115,6 +115,8 @@ def quality_trim(fp_in, folder_out, min_qual):
         "-o", fp_out,
         "-v"
     ])
+
+    assert os.path.exists(fp_out)
 
     return fp_out
 

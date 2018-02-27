@@ -51,6 +51,10 @@ if __name__ == "__main__":
                         type=int,
                         default=16,
                         help="Number of threads to use aligning.")
+    parser.add_argument("--min-qual",
+                        type=int,
+                        default=None,
+                        help="If specified, trim reads to a minimum Q score.")
     parser.add_argument("--temp-folder",
                         type=str,
                         default='/share',
@@ -109,7 +113,11 @@ if __name__ == "__main__":
         # Capture each command in a try statement
         # Get the input reads
         try:
-            read_fp = get_reads_from_url(input_str, sample_temp_folder)
+            read_fp = get_reads_from_url(
+                input_str,
+                sample_temp_folder,
+                min_qual=args.min_qual
+            )
         except:
             exit_and_clean_up(temp_folder)
 
