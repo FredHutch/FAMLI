@@ -8,19 +8,36 @@ import logging
 import subprocess
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from Bio.SeqIO.FastaIO import SimpleFastaParser
-from lib.exec_helpers import run_cmds
+from exec_helpers import run_cmds
 
 
 def get_reads_from_url(
     input_str,
     temp_folder,
-    random_string=str(uuid.uuid4())[:8]
+    random_string=str(uuid.uuid4())[:8],
+    min_qual=None
 ):
     """Get a set of reads from a URL -- return the downloaded filepath."""
+    # Fetch reads into $temp_folder/fetched_reads/
+    fetched_reads_folder = os.path.join(temp_folder, "fetched_reads")
+
+    # Reads with cleaned headers go into $temp_folder/cleaned_reads/
+    cleaned_reads_folder = os.path.join(temp_folder, "cleaned_reads")
+
+    # Quality trimmed reads go into $temp_folder/trimmed_reads/
+    trimmed_reads_folder = os.path.join(temp_folder, "cleaned_reads")
+
+    for folder in [
+        fetched_reads_folder, cleaned_reads_folder, trimmed_reads_folder
+    ]:
+        if not os.path.exists(folder):
+            logging.info("Making new folder {}".format(folder))
+            os.mkdir(folder)
+
     logging.info("Getting reads from {}".format(input_str))
 
     filename = input_str.split('/')[-1]
-    local_path = os.path.join(temp_folder, filename)
+    local_path = os.path.join(fetched_reads_folder, filename)
 
     logging.info("Filename: " + filename)
     logging.info("Local path: " + local_path)
@@ -29,57 +46,77 @@ def get_reads_from_url(
         logging.info("Treating as local path")
         msg = "Input file does not exist ({})".format(input_str)
         assert os.path.exists(input_str), msg
-        logging.info("Copying to temporary folder, cleaning up headers")
 
-        # Add a random string to the filename
-        local_path = local_path.split('/')
-        if local_path[-1].endswith(".gz"):
-            local_path[-1] = local_path[-1].replace(".gz", "")
-        local_path[-1] = "{}-{}".format(random_string, local_path[-1])
-        local_path = '/'.join(local_path)
-
-        # Make the FASTQ headers unique
-        clean_fastq_headers(input_str, local_path)
-
-        return local_path
+        logging.info("Making a symlink to temporary folder")
+        os.symlink(input_str, local_path)
 
     # Get files from AWS S3
-    if input_str.startswith('s3://'):
+    elif input_str.startswith('s3://'):
         logging.info("Getting reads from S3")
         run_cmds([
             'aws', 's3', 'cp', '--quiet', '--sse',
-            'AES256', input_str, temp_folder
+            'AES256', input_str, fetched_reads_folder
             ])
 
     # Get files from an FTP server
     elif input_str.startswith('ftp://'):
         logging.info("Getting reads from FTP")
-        run_cmds(['wget', '-P', temp_folder, input_str])
+        run_cmds(['wget', '-P', fetched_reads_folder, input_str])
 
     # Get files from SRA
     elif input_str.startswith('sra://'):
         accession = filename
         logging.info("Getting reads from SRA: " + accession)
-        local_path = get_sra(accession, temp_folder)
+        local_path = get_sra(accession, fetched_reads_folder)
 
     else:
         raise Exception("Did not recognize prefix for input: " + input_str)
 
-    # Add a random string to the filename
-    new_path = local_path.split('/')
-    if new_path[-1].endswith(".gz"):
-        new_path[-1] = new_path[-1].replace(".gz", "")
-    new_path[-1] = "{}-{}".format(random_string, new_path[-1])
-    new_path = '/'.join(new_path)
-    logging.info(
-        "Copying {} to {}, cleaning up FASTQ headers".format(
-            local_path, new_path
-            )
-        )
-    clean_fastq_headers(local_path, new_path)
+    # Clean up the FASTQ headers
+    logging.info("Cleaning up FASTQ headers")
+    cleaned_path = clean_fastq_headers(
+        local_path,
+        cleaned_reads_folder
+    )
+    logging.info("Made new cleaned FASTQ file: {}".format(cleaned_path))
     logging.info("Deleting old file: {}".format(local_path))
     os.unlink(local_path)
-    return new_path
+
+    if min_qual is None:
+        return cleaned_path
+    else:
+        # Quality trim the FASTQ
+        logging.info("Quality trimming the FASTQ (Q{})".format(min_qual))
+        trimmed_path = quality_trim(
+            local_path,
+            trimmed_reads_folder,
+            min_qual
+        )
+        logging.info("Made new quality trimmed FASTQ: {}".format(trimmed_path))
+        logging.info("Deleting old file: {}".format(cleaned_path))
+        os.unlink(cleaned_path)
+        return trimmed_path
+
+
+def quality_trim(fp_in, folder_out, min_qual):
+    """Trim a FASTQ to a minimum quality score."""
+    assert os.path.exists(fp_in)
+    assert fp_in.endswith(".gz") is False
+    assert os.path.exists(folder_out)
+    assert isinstance(min_qual, int)
+
+    fp_out = os.path.join(folder_out, fp_in.split("/")[-1])
+
+    run_cmds([
+        "fastq_quality_trimmer",
+        "-Q", "33",
+        "-t", str(min_qual),
+        "-i", fp_in,
+        "-o", fp_out,
+        "-v"
+    ])
+
+    return fp_out
 
 
 def get_sra(accession, temp_folder):
@@ -147,7 +184,7 @@ def count_fastq_reads(fp):
     return n
 
 
-def clean_fastq_headers(fp_in, fp_out):
+def clean_fastq_headers(fp_in, folder_out):
     """Read in a FASTQ file and write out a copy with unique headers."""
 
     # Constraints
@@ -158,15 +195,18 @@ def clean_fastq_headers(fp_in, fp_out):
     # 5. Spacer lines match the header line
     # 6. Quality lines are not empty
 
+    # Make a new file in the output folder
+    fp_out = os.path.join(folder_out, fp_in.split("/")[-1])
+    # Don't gzip the output
+    if fp_out.endswith(".gz"):
+        fp_out = fp_out[:-3]
+
     if fp_in.endswith(".gz"):
         f_in = gzip.open(fp_in, "rt")
     else:
         f_in = open(fp_in, "rt")
 
-    if fp_out.endswith(".gz"):
-        f_out = gzip.open(fp_out, "wt")
-    else:
-        f_out = open(fp_out, "wt")
+    f_out = open(fp_out, "wt")
 
     # Keep track of the line number
     for ix, line in enumerate(f_in):
@@ -208,3 +248,6 @@ def clean_fastq_headers(fp_in, fp_out):
     # Close the input and output file handles
     f_in.close()
     f_out.close()
+
+    # Return the path to the file that was written
+    return fp_out

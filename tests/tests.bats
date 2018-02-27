@@ -39,6 +39,12 @@
   [[ "$h" =~ "PASSED TESTS" ]]
 }
 
+@test "Quality trimming" {
+  h="$(python /usr/famli/lib/test_quality_trim.py)"
+
+  [[ "$h" =~ "PASSED TESTS" ]]
+}
+
 @test "FAMLI integration tests" {
   h="$(python /usr/famli/tests/integration_tests.py)"
 
