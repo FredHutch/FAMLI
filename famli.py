@@ -25,11 +25,11 @@ if __name__ == "__main__":
 
     parser.add_argument("--input",
                         type=str,
-                        help="""Location for input file(s). Comma-separated.
+                        help="""Location for input file(s). Combine multiple files with +.
                                 (Supported: sra://, s3://, or ftp://).""")
     parser.add_argument("--sample-name",
                         type=str,
-                        help="""Name of sample, for filename.""")
+                        help="""Name of sample, sets output filename.""")
     parser.add_argument("--ref-db",
                         type=str,
                         help="""Folder containing reference database.
@@ -66,6 +66,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # Make sure that there are no commas or whitespaces in the input
+    input_str = args.input
+    assert ' ' not in input_str, input_str
+    assert ',' not in input_str, input_str
+
     # Make a temporary folder for all files to be placed in
     temp_folder = os.path.join(args.temp_folder, str(uuid.uuid4())[:8])
     assert os.path.exists(temp_folder) is False
@@ -99,111 +104,99 @@ if __name__ == "__main__":
 
     logging.info("Reference database: " + db_fp)
 
-    # Align each of the inputs and calculate the overall abundance
-    for input_str in args.input.split(','):
-        # Keep track of the time elapsed to process each sample
-        start_time = time.time()
+    # Align the input data and calculate the overall abundance
 
-        # Make a new temporary folder for this sample
-        sample_temp_folder = os.path.join(temp_folder, str(uuid.uuid4())[:8])
-        assert os.path.exists(sample_temp_folder) is False
-        logging.info(
-            "Making temp folder for this sample: {}".format(sample_temp_folder)
-        )
-        os.mkdir(sample_temp_folder)
+    # Keep track of the time elapsed to process this sample
+    start_time = time.time()
 
-        logging.info("Processing input argument: " + input_str)
+    logging.info("Processing input argument: " + input_str)
 
-        # Multiple input reads may be separated with a '+'
-        input_str = input_str.split("+")
-        # Make sure that they are all unique arguments
-        assert len(input_str) == len(set(input_str)), "Duplicate arguments"
-        # Make sure that the filenames are also all unique
-        assert len(input_str) == len(set([
-            s.split('/')[-1] for s in input_str
-        ])), "Duplicate filenames"
+    # Multiple input reads may be separated with a '+'
+    input_str = input_str.split("+")
+    # Make sure that they are all unique arguments
+    assert len(input_str) == len(set(input_str)), "Duplicate arguments"
+    # Make sure that the filenames are also all unique
+    assert len(input_str) == len(set([
+        s.split('/')[-1] for s in input_str
+    ])), "Duplicate filenames"
 
-        # Capture each command in a try statement
-        # Get the input reads
-        read_fps = []
-        for s in input_str:
-            logging.info("Fetching {}".format(s))
-            try:
-                read_fps.append(get_reads_from_url(
-                    s, sample_temp_folder, min_qual=args.min_qual))
-            except:
-                exit_and_clean_up(temp_folder)
-
-        # Combine the files into a single FASTQ
-        read_fp = os.path.join(sample_temp_folder, "input.fastq")
-        combine_fastqs(read_fps, read_fp)
-
-        # Run the alignment
+    # Capture each command in a try statement
+    # Get the input reads
+    read_fps = []
+    for s in input_str:
+        logging.info("Fetching {}".format(s))
         try:
-            align_fp = align_reads(
-                read_fp,               # FASTQ file path
-                db_fp,                 # Local path to DB
-                sample_temp_folder,    # Folder for results
-                query_gencode=args.query_gencode,
-                threads=args.threads,
-                min_score=args.min_score,
-                blocks=args.blocks,
+            read_fps.append(get_reads_from_url(
+                s, temp_folder, min_qual=args.min_qual))
+        except:
+            exit_and_clean_up(temp_folder)
+
+    # Combine the files into a single FASTQ
+    read_fp = os.path.join(temp_folder, "input.fastq")
+    combine_fastqs(read_fps, read_fp)
+
+    # Run the alignment
+    try:
+        align_fp = align_reads(
+            read_fp,               # FASTQ file path
+            db_fp,                 # Local path to DB
+            temp_folder,    # Folder for results
+            query_gencode=args.query_gencode,
+            threads=args.threads,
+            min_score=args.min_score,
+            blocks=args.blocks,
+        )
+    except:
+        exit_and_clean_up(temp_folder)
+
+    # Process the alignments, reassigning multi-mapped reads
+    try:
+        with open(align_fp, "rt") as align_handle:
+            aligned_reads, abund = parse_alignment(
+                align_handle,
             )
-        except:
-            exit_and_clean_up(temp_folder)
+    except:
+        exit_and_clean_up(temp_folder)
 
-        # Process the alignments, reassigning multi-mapped reads
-        try:
-            with open(align_fp, "rt") as align_handle:
-                aligned_reads, abund = parse_alignment(
-                    align_handle,
-                )
-        except:
-            exit_and_clean_up(temp_folder)
+    # Calculate the number of deduplicated reads
+    deduplicated_reads = sum([d["nreads"] for d in abund])
 
-        # Calculate the number of deduplicated reads
-        deduplicated_reads = sum([d["nreads"] for d in abund])
+    # Name the output file based on the input file
+    # Ultimately adding ".json.gz" to the input file name
+    if args.sample_name is not None:
+        output_prefix = args.sample_name
+    else:
+        output_prefix = input_str[0].split("/")[-1]
+    logging.info("Using sample name {} for output prefix".format(
+        output_prefix))
 
-        # Name the output file based on the input file
-        # Ultimately adding ".json.gz" to the input file name
-        if args.sample_name is not None:
-            output_prefix = args.sample_name
-        else:
-            output_prefix = input_str[0].split("/")[-1]
-        logging.info("Using sample name {} for output prefix".format(
-            output_prefix))
+    # Count the total number of reads
+    logging.info("Counting the total number of reads")
+    n_reads = count_fastq_reads(read_fp)
+    logging.info("Reads in input file: {}".format(n_reads))
 
-        # Count the total number of reads
-        logging.info("Counting the total number of reads")
-        n_reads = count_fastq_reads(read_fp)
-        logging.info("Reads in input file: {}".format(n_reads))
+    # Read in the logs
+    logging.info("Reading in the logs")
+    logs = open(log_fp, 'rt').readlines()
 
-        # Read in the logs
-        logging.info("Reading in the logs")
-        logs = open(log_fp, 'rt').readlines()
-
-        # Wrap up all of the results into a single JSON
-        # and write it to the output folder
-        output = {
-            "input_path": "+".join(input_str),
-            "input": output_prefix,
-            "output_folder": args.output_folder,
-            "logs": logs,
-            "ref_db": db_fp,
-            "ref_db_url": args.ref_db,
-            "results": abund,
-            "total_reads": n_reads,
-            "aligned_reads": aligned_reads,
-            "deduplicated_reads": deduplicated_reads,
-            "time_elapsed": time.time() - start_time
-        }
-        return_results(
-            output, output_prefix, args.output_folder, sample_temp_folder
-        )
-
-        # Delete any files that were created for this sample
-        logging.info("Removing temporary folder: " + sample_temp_folder)
-        shutil.rmtree(sample_temp_folder)
+    # Wrap up all of the results into a single JSON
+    # and write it to the output folder
+    output = {
+        "input_path": "+".join(input_str),
+        "input": output_prefix,
+        "output_folder": args.output_folder,
+        "logs": logs,
+        "ref_db": db_fp,
+        "ref_db_url": args.ref_db,
+        "results": abund,
+        "total_reads": n_reads,
+        "aligned_reads": aligned_reads,
+        "deduplicated_reads": deduplicated_reads,
+        "time_elapsed": time.time() - start_time
+    }
+    return_results(
+        output, output_prefix, args.output_folder, temp_folder
+    )
 
     # Delete any files that were created for this sample
     logging.info("Removing temporary folder: " + temp_folder)
