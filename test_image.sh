@@ -16,7 +16,7 @@ test_image(){
 		$img_tag \
 			famli.py \
 				--input /share/example.fastq \
-				--ref-db /share/ \
+				--ref-db /share/refdb.dmnd \
 				--output-folder /share/ \
 				--temp-folder /share/
 }

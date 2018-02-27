@@ -5,6 +5,11 @@
   [[ "$v" =~ "2.8.2" ]]
 }
 
+@test "FASTX Toolkit 0.0.13" {
+  v="$(fastq_quality_trimmer -h 2>&1 || true )"
+  [[ "$v" =~ "FASTX Toolkit 0.0.13" ]]
+}
+
 
 @test "AWS CLI v1.11.146" {
   v="$(aws --version 2>&1)"
@@ -30,6 +35,12 @@
 
 @test "Parse the alignments" {
   h="$(python /usr/famli/lib/test_parse_alignments.py)"
+
+  [[ "$h" =~ "PASSED TESTS" ]]
+}
+
+@test "Quality trimming" {
+  h="$(python /usr/famli/lib/test_quality_trim.py)"
 
   [[ "$h" =~ "PASSED TESTS" ]]
 }
