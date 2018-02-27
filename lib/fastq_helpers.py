@@ -11,6 +11,32 @@ from Bio.SeqIO.FastaIO import SimpleFastaParser
 from exec_helpers import run_cmds
 
 
+def combine_fastqs(fps_in, fp_out):
+    """Combine multiple FASTQs into a single FASTQ."""
+    assert len(fps_in) > 0
+
+    if len(fps_in) == 1:
+        assert os.path.exists(fps_in[0])
+        logging.info("Making a symlink: {} -> {}".format(fps_in[0], fp_out))
+        os.symlink(fps_in[0], fp_out)
+    else:
+        logging.info("Combining {:,} FASTQ files".format(len(fps_in)))
+        logging.info("Writing all inputs to {}".format(fp_out))
+        with open(fp_out, "wt") as fo:
+            for fp_ix, f in enumerate(fps_in):
+                logging.info("Adding {} to {}".format(f, fp_out))
+                with open(f, "rt") as fi:
+                    for line_ix, line in enumerate(fi):
+                        # Add a file index to the header
+                        # In case there are two files with the same headers
+                        mod = line_ix % 4
+                        if mod == 0 or mod == 2:
+                            line = line.rstrip("\n")
+                            fo.write("{}-{}\n".format(line, fp_ix))
+                        else:
+                            fo.write(line)
+
+
 def get_reads_from_url(
     input_str,
     temp_folder,

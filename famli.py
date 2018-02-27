@@ -13,6 +13,7 @@ from lib.exec_helpers import exit_and_clean_up
 from lib.exec_helpers import get_reference_database
 from lib.fastq_helpers import get_reads_from_url
 from lib.fastq_helpers import count_fastq_reads
+from lib.fastq_helpers import combine_fastqs
 from lib.famli_helpers import parse_alignment
 
 
@@ -26,6 +27,9 @@ if __name__ == "__main__":
                         type=str,
                         help="""Location for input file(s). Comma-separated.
                                 (Supported: sra://, s3://, or ftp://).""")
+    parser.add_argument("--sample-name",
+                        type=str,
+                        help="""Name of sample, for filename.""")
     parser.add_argument("--ref-db",
                         type=str,
                         help="""Folder containing reference database.
@@ -110,16 +114,29 @@ if __name__ == "__main__":
 
         logging.info("Processing input argument: " + input_str)
 
+        # Multiple input reads may be separated with a '+'
+        input_str = input_str.split("+")
+        # Make sure that they are all unique arguments
+        assert len(input_str) == len(set(input_str)), "Duplicate arguments"
+        # Make sure that the filenames are also all unique
+        assert len(input_str) == len(set([
+            s.split('/')[-1] for s in input_str
+        ])), "Duplicate filenames"
+
         # Capture each command in a try statement
         # Get the input reads
-        try:
-            read_fp = get_reads_from_url(
-                input_str,
-                sample_temp_folder,
-                min_qual=args.min_qual
-            )
-        except:
-            exit_and_clean_up(temp_folder)
+        read_fps = []
+        for s in input_str:
+            logging.info("Fetching {}".format(s))
+            try:
+                read_fps.append(get_reads_from_url(
+                    s, sample_temp_folder, min_qual=args.min_qual))
+            except:
+                exit_and_clean_up(temp_folder)
+
+        # Combine the files into a single FASTQ
+        read_fp = os.path.join(sample_temp_folder, "input.fastq")
+        combine_fastqs(read_fps, read_fp)
 
         # Run the alignment
         try:
@@ -149,7 +166,12 @@ if __name__ == "__main__":
 
         # Name the output file based on the input file
         # Ultimately adding ".json.gz" to the input file name
-        output_prefix = input_str.split("/")[-1]
+        if args.sample_name is not None:
+            output_prefix = args.sample_name
+        else:
+            output_prefix = input_str[0].split("/")[-1]
+        logging.info("Using sample name {} for output prefix".format(
+            output_prefix))
 
         # Count the total number of reads
         logging.info("Counting the total number of reads")
@@ -163,7 +185,7 @@ if __name__ == "__main__":
         # Wrap up all of the results into a single JSON
         # and write it to the output folder
         output = {
-            "input_path": input_str,
+            "input_path": "+".join(input_str),
             "input": output_prefix,
             "output_folder": args.output_folder,
             "logs": logs,
