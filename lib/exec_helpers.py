@@ -54,11 +54,14 @@ def align_reads(read_fp,               # FASTQ file path
                 query_gencode=11,      # Genetic code
                 threads=1,             # Threads
                 min_score=20,          # Minimum alignment score
-                blocks=4):             # Memory block size
+                blocks=4,              # Memory block size
+                top=10,                # Report alignments >10% from max
+                min_id=80,             # Minimum alignment identity
+                qcov=95):              # Minimum query coverage
 
     """Align a set of reads with DIAMOND."""
 
-    align_fp = "{}.sam".format(read_fp)
+    align_fp = "{}.aln".format(read_fp)
     logging.info("Input reads: {}".format(read_fp))
     logging.info("Reference database: {}".format(db_fp))
     logging.info("Genetic code: {}".format(query_gencode))
@@ -81,9 +84,9 @@ def align_reads(read_fp,               # FASTQ file path
             "evalue", "bitscore",
             "qlen", "slen",
             "--min-score", str(min_score),  # Minimum alignment score
-            "--query-cover", "95",          # Minimum query coverage
-            "--id", "80",                   # Minimum alignment identity
-            "--top", "10",                  # Report alignments >10% from max
+            "--query-cover", str(qcov),     # Minimum query coverage
+            "--id", str(min_id),            # Minimum alignment identity
+            "--top", str(top),              # Report alignments >10% from max
             "--block-size", str(blocks),    # Memory block size
             "--query-gencode",              # Genetic code
             str(query_gencode),
