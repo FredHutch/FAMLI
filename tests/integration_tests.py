@@ -8,7 +8,9 @@ import subprocess
 
 p = subprocess.Popen([
     "famli.py",
+    "align",
     "--input", "/usr/famli/tests/example.fastq",
+    "--sample-name", "example1",
     "--ref-db", "/usr/famli/tests/refdb.dmnd",
     "--output-folder", "/usr/famli/tests",
     "--temp-folder", "/usr/famli/tests"
@@ -18,7 +20,7 @@ exitcode = p.wait()
 
 assert exitcode == 0
 
-output = json.load(gzip.open("/usr/famli/tests/example.fastq.json.gz"))
+output = json.load(gzip.open("/usr/famli/tests/example1.json.gz"))
 
 assert output["aligned_reads"] == 338, output["aligned_reads"]
 assert output["total_reads"] == 360, output["total_reads"]
@@ -35,7 +37,9 @@ assert len(output["results"]) == 2, len(output["results"])
 # Run the same tests with quality trimming
 p = subprocess.Popen([
     "famli.py",
+    "align",
     "--input", "/usr/famli/tests/example.fastq",
+    "--sample-name", "example2",
     "--ref-db", "/usr/famli/tests/refdb.dmnd",
     "--output-folder", "/usr/famli/tests",
     "--temp-folder", "/usr/famli/tests",
@@ -46,7 +50,7 @@ exitcode = p.wait()
 
 assert exitcode == 0
 
-output = json.load(gzip.open("/usr/famli/tests/example.fastq.json.gz"))
+output = json.load(gzip.open("/usr/famli/tests/example2.json.gz"))
 
 assert output["aligned_reads"] == 338, output["aligned_reads"]
 assert output["total_reads"] == 360, output["total_reads"]
@@ -65,6 +69,7 @@ input_fps = "/usr/famli/tests/example.fastq+/usr/famli/tests/example2.fastq"
 # Run the same tests with quality trimming
 p = subprocess.Popen([
     "famli.py",
+    "align",
     "--input",
     input_fps,
     "--sample-name", "combined",
@@ -89,5 +94,26 @@ assert output["input_path"] == input_fps, output["input_path"]
 
 # THREE references now have deduplicated reads
 assert len(output["results"]) == 3, len(output["results"])
+
+# Just run the 'filter' module
+p = subprocess.Popen([
+    "famli.py",
+    "filter",
+    "--input",
+    "/usr/famli/tests/example.diamond.aln",
+    "--output", "/usr/famli/tests/example3.json"
+])
+stdout, stderr = p.communicate()
+exitcode = p.wait()
+
+assert exitcode == 0
+
+output = json.load(open("/usr/famli/tests/example3.json", "rt"))
+n_dedup = sum([d["nreads"] for d in output])
+
+assert n_dedup == 359, n_dedup
+
+# Three references survived filtering
+assert len(output) == 3
 
 print("PASSED TESTS")
