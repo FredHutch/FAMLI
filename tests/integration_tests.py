@@ -8,6 +8,7 @@ import subprocess
 
 p = subprocess.Popen([
     "famli.py",
+    "align",
     "--input", "/usr/famli/tests/example.fastq",
     "--ref-db", "/usr/famli/tests/refdb.dmnd",
     "--output-folder", "/usr/famli/tests",
@@ -35,6 +36,7 @@ assert len(output["results"]) == 2, len(output["results"])
 # Run the same tests with quality trimming
 p = subprocess.Popen([
     "famli.py",
+    "align",
     "--input", "/usr/famli/tests/example.fastq",
     "--ref-db", "/usr/famli/tests/refdb.dmnd",
     "--output-folder", "/usr/famli/tests",
@@ -65,6 +67,7 @@ input_fps = "/usr/famli/tests/example.fastq+/usr/famli/tests/example2.fastq"
 # Run the same tests with quality trimming
 p = subprocess.Popen([
     "famli.py",
+    "align",
     "--input",
     input_fps,
     "--sample-name", "combined",
