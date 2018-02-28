@@ -216,6 +216,7 @@ class FAMLI:
         output = {
             "input_path": "+".join(input_str),
             "input": output_prefix,
+            "sample": args.sample_name,
             "output_folder": args.output_folder,
             "logs": logs,
             "ref_db": db_fp,
