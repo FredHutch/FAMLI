@@ -52,6 +52,7 @@ ADD famli /usr/famli/famli
 RUN cd /usr/famli && \
 	chmod +x famli.py && \
 	ln -s /usr/famli/famli.py /usr/bin/
+ENV PYTHONPATH="/usr/famli:${PYTHONPATH}"
 
 
 # Run tests and then remove the folder
