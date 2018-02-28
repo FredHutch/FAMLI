@@ -48,7 +48,7 @@ RUN cd /usr/local/bin && \
 
 # Add the run script to the PATH
 ADD famli.py /usr/famli
-ADD lib /usr/famli/lib
+ADD famli /usr/famli/famli
 RUN cd /usr/famli && \
 	chmod +x famli.py && \
 	ln -s /usr/famli/famli.py /usr/bin/

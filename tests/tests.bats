@@ -34,13 +34,13 @@
 }
 
 @test "Parse the alignments" {
-  h="$(python /usr/famli/lib/test_parse_alignments.py)"
+  h="$(python /usr/famli/famli/test_parse_alignments.py)"
 
   [[ "$h" =~ "PASSED TESTS" ]]
 }
 
 @test "Quality trimming" {
-  h="$(python /usr/famli/lib/test_quality_trim.py)"
+  h="$(python /usr/famli/famli/test_quality_trim.py)"
 
   [[ "$h" =~ "PASSED TESTS" ]]
 }
