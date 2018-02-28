@@ -5,6 +5,8 @@ import os
 import sys
 import uuid
 import time
+import gzip
+import json
 import shutil
 import logging
 import argparse
@@ -32,9 +34,11 @@ class FAMLI:
         args = parser.parse_args(sys.argv[1:2])
 
         # Run the command that was specified
-        try:
-            getattr(self, args.command)()
-        except:
+        if args.command == "align":
+            self.align()
+        elif args.command == "filter":
+            self.filter()
+        else:
             parser.print_help()
             print("Unrecognized command")
 
@@ -46,18 +50,22 @@ class FAMLI:
 
         parser.add_argument("--input",
                             type=str,
+                            required=True,
                             help="""Location for input file(s). Combine multiple files with +.
                                     (Supported: sra://, s3://, or ftp://).""")
         parser.add_argument("--sample-name",
                             type=str,
+                            required=True,
                             help="""Name of sample, sets output filename.""")
         parser.add_argument("--ref-db",
                             type=str,
+                            required=True,
                             help="""Folder containing reference database.
                                     (Supported: s3://, ftp://, or local path).
                                     """)
         parser.add_argument("--output-folder",
                             type=str,
+                            required=True,
                             help="""Folder to place results.
                                     (Supported: s3://, or local path).""")
         parser.add_argument("--min-score",
@@ -229,6 +237,131 @@ class FAMLI:
         # Stop logging
         logging.info("Done")
         logging.shutdown()
+
+    def filter(self):
+        """Filter a set of alignments with FAMLI."""
+        parser = argparse.ArgumentParser(
+                description="""Filter a set of existing alignments in tabular
+                format with FAMLI""")
+
+        parser.add_argument("--input",
+                            type=str,
+                            help="Location for input alignement file.")
+        parser.add_argument("--output",
+                            type=str,
+                            help="Location for output JSON file.")
+        parser.add_argument("--threads",
+                            type=int,
+                            help="""Number of processors to use.""",
+                            default=4)
+        parser.add_argument("--logfile",
+                            type=str,
+                            help="""(Optional) Write log to this file.""")
+        parser.add_argument("--qseqid-ix",
+                            default=0,
+                            type=int,
+                            help="""Alignment column for query sequence ID.
+                            (0-indexed column ix)""")
+        parser.add_argument("--sseqid-ix",
+                            default=1,
+                            type=int,
+                            help="""Alignment column for subject sequence ID.
+                            (0-indexed column ix)""")
+        parser.add_argument("--qstart-ix",
+                            default=6,
+                            type=int,
+                            help="""Alignment column for query start position.
+                            (0-indexed column ix, 1-indexed start position)""")
+        parser.add_argument("--qend-ix",
+                            default=7,
+                            type=int,
+                            help="""Alignment column for query end position.
+                            (0-indexed column ix, 1-indexed end position)""")
+        parser.add_argument("--sstart-ix",
+                            default=8,
+                            type=int,
+                            help="""Alignment column for subject start position.
+                            (0-indexed column ix, 1-indexed start position)""")
+        parser.add_argument("--send-ix",
+                            default=9,
+                            type=int,
+                            help="""Alignment column for subject end position.
+                            (0-indexed column ix, 1-indexed end position)""")
+        parser.add_argument("--bitscore-ix",
+                            default=11,
+                            type=int,
+                            help="""Alignment column for alignment bitscore.
+                            (0-indexed column ix)""")
+        parser.add_argument("--slen-ix",
+                            default=13,
+                            type=int,
+                            help="""Alignment column for subject length.
+                            (0-indexed column ix)""")
+        parser.add_argument("--sd-mean-cutoff",
+                            default=1.0,
+                            type=float,
+                            help="""Threshold for filtering max SD / MEAN""")
+        parser.add_argument("--strim-5",
+                            default=18,
+                            type=int,
+                            help="""Amount to trim from 5' end of subject""")
+        parser.add_argument("--strim-3",
+                            default=18,
+                            type=int,
+                            help="""Amount to trim from 3' end of subject""")
+
+        args = parser.parse_args(sys.argv[2:])
+
+        start_time = time.time()
+
+        assert os.path.exists(args.input)
+
+        # Set up logging
+        logFormatter = logging.Formatter(
+            '%(asctime)s %(levelname)-8s [FAMLI parse] %(message)s'
+        )
+        rootLogger = logging.getLogger()
+        rootLogger.setLevel(logging.INFO)
+
+        if args.logfile:
+            # Write to file
+            fileHandler = logging.FileHandler(args.logfile)
+            fileHandler.setFormatter(logFormatter)
+            rootLogger.addHandler(fileHandler)
+
+        # Write to STDOUT
+        consoleHandler = logging.StreamHandler()
+        consoleHandler.setFormatter(logFormatter)
+        rootLogger.addHandler(consoleHandler)
+
+        if args.input.endswith(".gz"):
+            f = gzip.open(args.input, "rt")
+        else:
+            f = open(args.input, "rt")
+
+        aligned_reads, output = parse_alignment(
+            f,
+            QSEQID_i=args.qseqid_ix,
+            SSEQID_i=args.sseqid_ix,
+            QSTART_i=args.qstart_ix,
+            QEND_i=args.qend_ix,
+            SSTART_i=args.sstart_ix,
+            SEND_i=args.send_ix,
+            BITSCORE_i=args.bitscore_ix,
+            SLEN_i=args.slen_ix,
+            SD_MEAN_CUTOFF=args.sd_mean_cutoff,
+            STRIM_5=args.strim_5,
+            STRIM_3=args.strim_3,
+            threads=args.threads)
+
+        f.close()
+
+        if args.output:
+            with open(args.output, "wt") as fo:
+                json.dump(output, fo, indent=4)
+
+        elapsed = round(time.time() - start_time, 2)
+        logging.info("Time elapsed: {:,}".format(elapsed))
 
 
 if __name__ == "__main__":
