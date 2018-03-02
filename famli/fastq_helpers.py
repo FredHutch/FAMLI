@@ -1,6 +1,7 @@
 #!/usr/bin/python
 """Functions to help working with FASTQ files."""
 
+import re
 import os
 import gzip
 import uuid
@@ -236,6 +237,9 @@ def clean_fastq_headers(fp_in, folder_out):
 
     f_out = open(fp_out, "wt")
 
+    # Compile a regex to mask non ATCG
+    atcg = re.compile('[^ATCG\n]')
+
     # Keep track of the line number
     for ix, line in enumerate(f_in):
         # Get the line position 0-3
@@ -260,6 +264,9 @@ def clean_fastq_headers(fp_in, folder_out):
         elif mod == 1:
             # 4. Sequence lines are not empty
             assert len(line) > 1
+
+            # Replace any non-ATCG with N
+            line = atcg.sub('N', line)
 
         elif mod == 2:
             # 5. Spacer lines start with '+' and match the header
