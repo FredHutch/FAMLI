@@ -268,16 +268,6 @@ class FAMLI:
                             type=int,
                             help="""Alignment column for subject sequence ID.
                             (0-indexed column ix)""")
-        parser.add_argument("--qstart-ix",
-                            default=6,
-                            type=int,
-                            help="""Alignment column for query start position.
-                            (0-indexed column ix, 1-indexed start position)""")
-        parser.add_argument("--qend-ix",
-                            default=7,
-                            type=int,
-                            help="""Alignment column for query end position.
-                            (0-indexed column ix, 1-indexed end position)""")
         parser.add_argument("--sstart-ix",
                             default=8,
                             type=int,
@@ -344,8 +334,6 @@ class FAMLI:
             f,
             QSEQID_i=args.qseqid_ix,
             SSEQID_i=args.sseqid_ix,
-            QSTART_i=args.qstart_ix,
-            QEND_i=args.qend_ix,
             SSTART_i=args.sstart_ix,
             SEND_i=args.send_ix,
             BITSCORE_i=args.bitscore_ix,
