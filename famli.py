@@ -95,6 +95,9 @@ class FAMLI:
                             type=str,
                             default='/share',
                             help="Folder used for temporary files.")
+        parser.add_argument("--batchsize",
+                            type=int,
+                            help="""Number of reads to process at a time.""")
 
         args = parser.parse_args(sys.argv[2:])
 
@@ -177,6 +180,7 @@ class FAMLI:
                 threads=args.threads,
                 min_score=args.min_score,
                 blocks=args.blocks,
+                batchsize=args.batchsize,
             )
         except:
             exit_and_clean_up(temp_folder)
@@ -186,6 +190,7 @@ class FAMLI:
             with open(align_fp, "rt") as align_handle:
                 aligned_reads, abund = parse_alignment(
                     align_handle,
+                    batchsize=args.batchsize,
                 )
         except:
             exit_and_clean_up(temp_folder)
@@ -225,7 +230,10 @@ class FAMLI:
             "total_reads": n_reads,
             "aligned_reads": aligned_reads,
             "deduplicated_reads": deduplicated_reads,
-            "time_elapsed": time.time() - start_time
+            "time_elapsed": time.time() - start_time,
+            "params": {
+                "batchsize": args.batchsize
+            }
         }
         return_results(
             output, output_prefix, args.output_folder, temp_folder
@@ -258,6 +266,9 @@ class FAMLI:
         parser.add_argument("--logfile",
                             type=str,
                             help="""(Optional) Write log to this file.""")
+        parser.add_argument("--batchsize",
+                            type=int,
+                            help="""Number of reads to process at a time.""")
         parser.add_argument("--qseqid-ix",
                             default=0,
                             type=int,
@@ -341,7 +352,9 @@ class FAMLI:
             SD_MEAN_CUTOFF=args.sd_mean_cutoff,
             STRIM_5=args.strim_5,
             STRIM_3=args.strim_3,
-            threads=args.threads)
+            threads=args.threads,
+            batchsize=args.batchsize,
+        )
 
         f.close()
 

@@ -68,7 +68,7 @@ class BLAST6Parser:
     def yield_alignments(
         self,
         align_handle,
-        block_size=1e7,
+        batchsize=None,
         QSEQID_i=0,
         SSEQID_i=1,
         SSTART_i=8,
@@ -90,6 +90,9 @@ class BLAST6Parser:
             )
         ]
 
+        if batchsize is None:
+            yield alignments
+
         # Yield successive batches of the alignments
         batch_num = 1
         while len(alignments) > 0:
@@ -99,7 +102,7 @@ class BLAST6Parser:
             for ix, a in enumerate(alignments):
                 if a[0] != last_query:
                     n_unique_queries += 1
-                    if n_unique_queries > block_size:
+                    if n_unique_queries > batchsize:
                         break
             # If we read through the entire set of alignments without
             # hitting the limit, yield the entire batch and exit
@@ -310,7 +313,7 @@ def calc_cov_by_subject(alignments, subject_len):
 
 
 def parse_alignment(align_handle,
-                    block_size=1e7,   # Number of reads to process at a time
+                    batchsize=None,   # Number of reads to process at a time
                     QSEQID_i=0,
                     SSEQID_i=1,
                     SSTART_i=8,
@@ -339,7 +342,7 @@ def parse_alignment(align_handle,
     # Iterate over blocks of alignments
     for alignments in parser.yield_alignments(
         align_handle,
-        block_size=block_size,
+        batchsize=batchsize,
         QSEQID_i=QSEQID_i,
         SSEQID_i=SSEQID_i,
         SSTART_i=SSTART_i,
