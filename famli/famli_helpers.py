@@ -92,6 +92,7 @@ class BLAST6Parser:
 
         if batchsize is None:
             yield alignments
+            return
 
         # Yield successive batches of the alignments
         batch_num = 1
@@ -440,6 +441,8 @@ def parse_alignment(align_handle,
 
         # Add to the batch of final alignments
         final_alignments.extend(alignments)
+        logging.info("A total of {:,} filtered alignments collected".format(
+            len(final_alignments)))
 
     # Change the name, for brevity
     alignments = final_alignments
