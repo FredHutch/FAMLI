@@ -77,8 +77,43 @@ class BLAST6Parser:
         BITSCORE_i=11,
         SLEN_i=13
     ):
-        # Read in all of the alignments
-        alignments = [a for a in self.parse(
+        """Yield batches of alignments, never to splitting up queries."""
+
+        # If the batchsize function has been disabled, return the full list
+        if batchsize is None:
+            logging.info("Batchsize feature disabled, reading all alignments")
+            yield [
+                a
+                for a in self.parse(
+                    align_handle,
+                    QSEQID_i=QSEQID_i,
+                    SSEQID_i=SSEQID_i,
+                    SSTART_i=SSTART_i,
+                    SEND_i=SEND_i,
+                    EVALUE_i=EVALUE_i,
+                    BITSCORE_i=BITSCORE_i,
+                    SLEN_i=SLEN_i
+                )
+            ]
+            return
+
+        logging.info("Reading in batches of {:,} alignments".format(batchsize))
+
+        assert batchsize > 0, "Batches must be larger than 0"
+
+        # Allocate a list that is 10% larger than the batch size
+        alignments = [None] * int(batchsize * 1.1)
+        # Keep track of how many alignments have been added to the list
+        n_alignments_filled = 0
+        # Keep track of the number of unique queries in this batch
+        n_unique_queries = 0
+        # Keep track of which batch of alignments we are on
+        batch_num = 1
+        # Keep track of the last unique query ID
+        last_query = None
+
+        # Add to the alignments, stopping when we get to the batch size limit
+        for a in self.parse(
             align_handle,
             QSEQID_i=QSEQID_i,
             SSEQID_i=SSEQID_i,
@@ -87,48 +122,46 @@ class BLAST6Parser:
             EVALUE_i=EVALUE_i,
             BITSCORE_i=BITSCORE_i,
             SLEN_i=SLEN_i
-            )
-        ]
+        ):
 
-        if batchsize is None:
-            yield alignments
-            return
+            # When we reach the batch size and new query, yield the alignments
+            if a[0] != last_query and n_alignments_filled >= batchsize:
+                logging.info("Processing batch {:,}".format(batch_num))
+                logging.info("Alignments: {:,}".format(n_alignments_filled))
+                logging.info("Unique queries: {:,}".format(n_unique_queries))
 
-        # Yield successive batches of the alignments
-        batch_num = 1
-        while len(alignments) > 0:
-            # Count up to the first `block_size` batch of reads
-            last_query = None
-            n_unique_queries = 0
-            for ix, a in enumerate(alignments):
-                if a[0] != last_query:
-                    n_unique_queries += 1
-                    if n_unique_queries > batchsize:
-                        break
-            # If we read through the entire set of alignments without
-            # hitting the limit, yield the entire batch and exit
-            if ix == len(alignments) - 1:
-                logging.info("Processing batch number {:,}".format(batch_num))
-                logging.info("Number of alignments: {:,}".format(
-                    len(alignments))
-                )
-                logging.info("Number of unique queries: {:,}".format(
-                    n_unique_queries)
-                )
-                yield alignments
-                break
-            else:
-                logging.info("Processing batch number {:,}".format(batch_num))
-                logging.info("Number of alignments: {:,}".format(ix + 1))
-                logging.info("Number of unique queries: {:,}".format(
-                    n_unique_queries)
-                )
-                # Yield this chunk
-                yield alignments[:ix]
-                # Subset the remaining alignments
-                alignments = alignments[ix:]
-
+                if n_alignments_filled < int(batchsize * 1.1):
+                    yield alignments[:n_alignments_filled]
+                else:
+                    yield alignments
+                # Reset the alignment data
+                alignments = [None] * int(batchsize * 1.1)
+                n_alignments_filled = 0
+                n_unique_queries = 0
                 batch_num += 1
+
+            # Add to the alignment list
+            if n_alignments_filled < int(batchsize * 1.1):
+                alignments[n_alignments_filled] = a
+            else:
+                alignments.append(a)
+
+            # Increment the counter of filled alignments
+            n_alignments_filled += 1
+            # Increment the counter of unique queries
+            if a[0] != last_query:
+                n_unique_queries += 1
+            # Record which query we saw in this alignment
+            last_query = a[0]
+
+        # Yield the final block of alignments
+        logging.info("Processing batch {:,}".format(batch_num))
+        logging.info("Alignments: {:,}".format(n_alignments_filled))
+        logging.info("Unique queries {:,}".format(n_unique_queries))
+        if n_alignments_filled < int(batchsize * 1.1):
+            yield alignments[:n_alignments_filled]
+        else:
+            yield alignments
 
 
 def recalc_subject_weight_worker(args):
@@ -434,7 +467,6 @@ def parse_alignment(align_handle,
             if a[1] in model.aln_prob[a[0]] and
             len(model.aln_prob[a[0]]) == 1
         ]
-        queries_after_reassignment = len(alignments)
 
         logging.info("Finished reassigning reads ({:,} remaining)".format(
             len(alignments)))
@@ -443,9 +475,11 @@ def parse_alignment(align_handle,
         final_alignments.extend(alignments)
         logging.info("A total of {:,} filtered alignments collected".format(
             len(final_alignments)))
+        del alignments
 
     # Change the name, for brevity
     alignments = final_alignments
+    queries_after_reassignment = len(alignments)
 
     # Cull the subjects that were removed during FILTER 2
     all_subjects = set([a[1] for a in alignments])
@@ -497,12 +531,6 @@ def parse_alignment(align_handle,
     logging.info("Collecting final alignments")
     alignment_ranges = defaultdict(list)
     for query, subject, sstart, send, bitscore in alignments:
-        # Alignment was removed
-        if subject not in model.aln_prob[query]:
-            continue
-        # Alignment is not unique
-        elif len(model.aln_prob[query]) > 1:
-            continue
         alignment_ranges[subject].append((sstart, send))
 
     logging.info("Calculating final stats")

@@ -15,10 +15,13 @@ test_image(){
 		--rm \
 		$img_tag \
 			famli.py \
+				align \
 				--input /share/example.fastq \
+				--sample-name example \
 				--ref-db /share/refdb.dmnd \
 				--output-folder /share/ \
-				--temp-folder /share/
+				--temp-folder /share/ \
+				--batchsize 50000
 }
 
 test_image $1
