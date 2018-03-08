@@ -287,6 +287,7 @@ def filter_subjects_by_coverage(args):
 def calc_cov_by_subject(alignments, subject_len):
     """Index a set of sorted alignments by subject."""
     # The output will be a dict with the start:stop index for each subject
+    assert len(alignments) > 0
     index = {}
 
     coverages = {
@@ -354,6 +355,9 @@ def parse_alignment(align_handle,
         # Count the total number of reads that were aligned
         logging.info("Counting unique queries")
         aligned_reads = len(set([a[0] for a in alignments]))
+
+        logging.info("Number of unique queries: {:,}".format(aligned_reads))
+        logging.info("Number of alignments: {:,}".format(len(alignments)))
 
         # Sort alignments by subject
         logging.info("Sorting alignments by subject")

@@ -180,7 +180,6 @@ class FAMLI:
                 threads=args.threads,
                 min_score=args.min_score,
                 blocks=args.blocks,
-                batchsize=args.batchsize,
             )
         except:
             exit_and_clean_up(temp_folder)
