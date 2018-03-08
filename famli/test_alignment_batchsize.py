@@ -15,6 +15,8 @@ assert len(alignments) == 100468, len(alignments)
 for batchsize in [10, 20, 50, 100, 1e7, None]:
     with open("/usr/famli/tests/example.diamond.aln", "rt") as f:
         chunks = [a for a in parser.yield_alignments(f, batchsize=batchsize)]
+        # Make sure that there aren't any singleton or empty batches
+        assert all([len(a) > 1 for a in chunks])
     assert sum(map(len, chunks)) == len(alignments), chunks
 
 print("PASSED TESTS")
