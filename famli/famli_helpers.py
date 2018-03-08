@@ -59,11 +59,14 @@ class BLAST6Parser:
                 bitscore
             )
 
-        logging.info("Done reading in {:,} alignments".format(i + 1))
-        logging.info("Number of unique subjects: {:,}".format(
-            len(self.subject_len)))
-        logging.info("Number of unique queries: {:,}".format(
-            len(self.unique_queries)))
+        if len(self.unique_queries) == 0:
+            logging.info("Zero alignments were found")
+        else:
+            logging.info("Done reading in {:,} alignments".format(i + 1))
+            logging.info("Number of unique subjects: {:,}".format(
+                len(self.subject_len)))
+            logging.info("Number of unique queries: {:,}".format(
+                len(self.unique_queries)))
 
     def yield_alignments(
         self,
@@ -385,6 +388,9 @@ def parse_alignment(align_handle,
         BITSCORE_i=BITSCORE_i,
         SLEN_i=SLEN_i
     ):
+        if len(alignments) == 0:
+            logging.info("Zero alignments to process in this batch")
+            continue
 
         # Count the total number of reads that were aligned
         logging.info("Counting unique queries")
@@ -476,6 +482,11 @@ def parse_alignment(align_handle,
         logging.info("A total of {:,} filtered alignments collected".format(
             len(final_alignments)))
         del alignments
+
+    if len(final_alignments) == 0:
+        logging.info("The entire sample contains zero alignments")
+        # Return some empty data
+        return 0, []
 
     # Change the name, for brevity
     alignments = final_alignments
