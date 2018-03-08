@@ -159,6 +159,11 @@ def get_sra(accession, temp_folder):
         "--outdir",
         temp_folder, accession
     ])
+    logging.info("Remove temporary SRA files")
+    run_cmds([
+        "rm", "-f",
+        "/root/ncbi/public/sra/{}*".format(accession)
+    ])
 
     # Combine any multiple files that were found
     logging.info("Concatenating output files")
