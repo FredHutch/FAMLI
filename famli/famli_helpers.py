@@ -65,6 +65,71 @@ class BLAST6Parser:
         logging.info("Number of unique queries: {:,}".format(
             len(self.unique_queries)))
 
+    def yield_alignments(
+        self,
+        align_handle,
+        batchsize=None,
+        QSEQID_i=0,
+        SSEQID_i=1,
+        SSTART_i=8,
+        SEND_i=9,
+        EVALUE_i=10,
+        BITSCORE_i=11,
+        SLEN_i=13
+    ):
+        # Read in all of the alignments
+        alignments = [a for a in self.parse(
+            align_handle,
+            QSEQID_i=QSEQID_i,
+            SSEQID_i=SSEQID_i,
+            SSTART_i=SSTART_i,
+            SEND_i=SEND_i,
+            EVALUE_i=EVALUE_i,
+            BITSCORE_i=BITSCORE_i,
+            SLEN_i=SLEN_i
+            )
+        ]
+
+        if batchsize is None:
+            yield alignments
+            return
+
+        # Yield successive batches of the alignments
+        batch_num = 1
+        while len(alignments) > 0:
+            # Count up to the first `block_size` batch of reads
+            last_query = None
+            n_unique_queries = 0
+            for ix, a in enumerate(alignments):
+                if a[0] != last_query:
+                    n_unique_queries += 1
+                    if n_unique_queries > batchsize:
+                        break
+            # If we read through the entire set of alignments without
+            # hitting the limit, yield the entire batch and exit
+            if ix == len(alignments) - 1:
+                logging.info("Processing batch number {:,}".format(batch_num))
+                logging.info("Number of alignments: {:,}".format(
+                    len(alignments))
+                )
+                logging.info("Number of unique queries: {:,}".format(
+                    n_unique_queries)
+                )
+                yield alignments
+                break
+            else:
+                logging.info("Processing batch number {:,}".format(batch_num))
+                logging.info("Number of alignments: {:,}".format(ix + 1))
+                logging.info("Number of unique queries: {:,}".format(
+                    n_unique_queries)
+                )
+                # Yield this chunk
+                yield alignments[:ix]
+                # Subset the remaining alignments
+                alignments = alignments[ix:]
+
+                batch_num += 1
+
 
 def recalc_subject_weight_worker(args):
     """Calculate the new weight of a subject."""
@@ -223,6 +288,7 @@ def filter_subjects_by_coverage(args):
 def calc_cov_by_subject(alignments, subject_len):
     """Index a set of sorted alignments by subject."""
     # The output will be a dict with the start:stop index for each subject
+    assert len(alignments) > 0
     index = {}
 
     coverages = {
@@ -249,10 +315,9 @@ def calc_cov_by_subject(alignments, subject_len):
 
 
 def parse_alignment(align_handle,
+                    batchsize=None,   # Number of reads to process at a time
                     QSEQID_i=0,
                     SSEQID_i=1,
-                    QSTART_i=6,
-                    QEND_i=7,
                     SSTART_i=8,
                     SEND_i=9,
                     BITSCORE_i=11,
@@ -273,97 +338,121 @@ def parse_alignment(align_handle,
     # Initialize the alignment parser
     parser = BLAST6Parser()
 
-    # Read in the alignments
-    alignments = [a for a in parser.parse(align_handle)]
+    # Keep a list of the final, filtered alignments
+    final_alignments = []
 
-    # Count the total number of reads that were aligned
-    logging.info("Counting unique queries")
-    aligned_reads = len(set([a[0] for a in alignments]))
+    # Iterate over blocks of alignments
+    for alignments in parser.yield_alignments(
+        align_handle,
+        batchsize=batchsize,
+        QSEQID_i=QSEQID_i,
+        SSEQID_i=SSEQID_i,
+        SSTART_i=SSTART_i,
+        SEND_i=SEND_i,
+        BITSCORE_i=BITSCORE_i,
+        SLEN_i=SLEN_i
+    ):
 
-    # Sort alignments by subject
-    logging.info("Sorting alignments by subject")
-    alignments.sort(key=lambda a: a[1])
+        # Count the total number of reads that were aligned
+        logging.info("Counting unique queries")
+        aligned_reads = len(set([a[0] for a in alignments]))
 
-    logging.info("Calculating coverage by subject")
-    subject_coverages, subject_index = calc_cov_by_subject(
-        alignments, parser.subject_len)
+        logging.info("Number of unique queries: {:,}".format(aligned_reads))
+        logging.info("Number of alignments: {:,}".format(len(alignments)))
 
-    # STEP 1. FILTER SUBJECTS BY "COULD" COVERAGE EVENNESS
-    logging.info("FILTER 1: Even coverage of all alignments")
+        # Sort alignments by subject
+        logging.info("Sorting alignments by subject")
+        alignments.sort(key=lambda a: a[1])
 
-    filter_1 = pool.map(filter_subjects_by_coverage, [
-        [
-            subject,
-            coverage,
-            SD_MEAN_CUTOFF,
-            STRIM_5,
-            STRIM_3
+        logging.info("Calculating coverage by subject")
+        subject_coverages, subject_index = calc_cov_by_subject(
+            alignments, parser.subject_len)
+
+        # STEP 1. FILTER SUBJECTS BY "COULD" COVERAGE EVENNESS
+        logging.info("FILTER 1: Even coverage of all alignments")
+
+        filter_1 = pool.map(filter_subjects_by_coverage, [
+            [
+                subject,
+                coverage,
+                SD_MEAN_CUTOFF,
+                STRIM_5,
+                STRIM_3
+            ]
+            for subject, coverage in subject_coverages.items()
+        ])
+
+        # Reformat as a dict
+        filter_1 = dict(filter_1)
+
+        logging.info("Subjects passing FILTER 1: {:,} / {:,}".format(
+            sum(filter_1.values()), len(filter_1)
+        ))
+
+        # Subset the alignments to only those subjects passing the filter
+        alignments = [
+            a
+            for subject, start_stop in subject_index.items()
+            for a in alignments[start_stop[0]: start_stop[1]]
+            if filter_1[subject]
         ]
-        for subject, coverage in subject_coverages.items()
-    ])
 
-    # Reformat as a dict
-    filter_1 = dict(filter_1)
+        logging.info("Queries passing FILTER 1: {:,} / {:,}".format(
+            len(set([a[0] for a in alignments])), len(parser.unique_queries)
+        ))
 
-    logging.info("Subjects passing FILTER 1: {:,} / {:,}".format(
-        sum(filter_1.values()), len(filter_1)
-    ))
+        # STEP 2: Reassign multi-mapped reads to a single subject
+        logging.info("FILTER 2: Reassign queries to a single subject")
 
-    # Subset the alignments to only those subjects passing the filter
-    alignments = [
-        a
-        for subject, start_stop in subject_index.items()
-        for a in alignments[start_stop[0]: start_stop[1]]
-        if filter_1[subject]
-    ]
+        # Add the alignments to a model to optimally re-assign reads
+        model = FAMLI_Reassignment(alignments, parser.subject_len, pool=pool)
 
-    logging.info("Queries passing FILTER 1: {:,} / {:,}".format(
-        len(set([a[0] for a in alignments])), len(parser.unique_queries)
-    ))
+        # Initialize the subject weights
+        model.init_subject_weight()
 
-    # STEP 2: Reassign multi-mapped reads to a single subject
-    logging.info("FILTER 2: Reassign queries to a single subject")
+        ix = 0
+        while ix <= MAX_ITERATIONS:
+            ix += 1
+            logging.info("Iteration: {:,}".format(ix))
+            # Recalculate the subject weight, given the naive alignment probabliities
+            model.recalc_subject_weight()
+            # Recalculate the alignment probabilities, given the subject weights
+            model.recalc_aln_prob()
 
-    # Add the alignments to a model to optimally re-assign reads
-    model = FAMLI_Reassignment(alignments, parser.subject_len, pool=pool)
+            # Trim the least likely alignment for each read
+            n_trimmed = model.trim_least_likely()
 
-    # Initialize the subject weights
-    model.init_subject_weight()
+            if n_trimmed == 0:
+                break
 
-    ix = 0
-    while ix <= MAX_ITERATIONS:
-        ix += 1
-        logging.info("Iteration: {:,}".format(ix))
-        # Recalculate the subject weight, given the naive alignment probabliities
-        model.recalc_subject_weight()
-        # Recalculate the alignment probabilities, given the subject weights
-        model.recalc_aln_prob()
+        logging.info("Subsetting the alignment to only the reassigned queries")
 
-        # Trim the least likely alignment for each read
-        n_trimmed = model.trim_least_likely()
+        # Subset the alignment to only the reassigned queries
+        alignments = [
+            a
+            for a in alignments
+            if a[1] in model.aln_prob[a[0]] and
+            len(model.aln_prob[a[0]]) == 1
+        ]
+        queries_after_reassignment = len(alignments)
 
-        if n_trimmed == 0:
-            break
+        logging.info("Finished reassigning reads ({:,} remaining)".format(
+            len(alignments)))
 
-    logging.info("Subsetting the alignment to only the reassigned queries")
+        # Add to the batch of final alignments
+        final_alignments.extend(alignments)
+        logging.info("A total of {:,} filtered alignments collected".format(
+            len(final_alignments)))
 
-    # Subset the alignment to only the reassigned queries
-    alignments = [
-        a
-        for a in alignments
-        if a[1] in model.aln_prob[a[0]] and
-        len(model.aln_prob[a[0]]) == 1
-    ]
-    queries_after_reassignment = len(alignments)
-
-    logging.info("Finished reassigning reads ({:,} remaining)".format(
-        len(alignments)))
+    # Change the name, for brevity
+    alignments = final_alignments
 
     # Cull the subjects that were removed during FILTER 2
+    all_subjects = set([a[1] for a in alignments])
     parser.subject_len = {
         subject: length
         for subject, length in parser.subject_len.items()
-        if subject in model.aln_prob_T
+        if subject in all_subjects
     }
 
     # STEP 3: Filter subjects by even coverage of reassigned queries
