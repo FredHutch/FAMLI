@@ -231,7 +231,12 @@ class FAMLI:
             "deduplicated_reads": deduplicated_reads,
             "time_elapsed": time.time() - start_time,
             "params": {
-                "batchsize": args.batchsize
+                "batchsize": args.batchsize,
+                "min_score": args.min_score,
+                "blocks": args.blocks,
+                "query_gencode": args.query_gencode,
+                "threads": args.threads,
+                "min_qual": args.min_qual
             }
         }
         return_results(
