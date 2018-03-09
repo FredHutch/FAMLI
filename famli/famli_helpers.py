@@ -437,7 +437,7 @@ def parse_alignment(align_handle,
         ]
 
         logging.info("Queries passing FILTER 1: {:,} / {:,}".format(
-            len(set([a[0] for a in alignments])), len(parser.unique_queries)
+            len(set([a[0] for a in alignments])), aligned_reads
         ))
 
         # STEP 2: Reassign multi-mapped reads to a single subject
