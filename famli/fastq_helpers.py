@@ -125,7 +125,7 @@ def get_reads_from_url(
         return trimmed_path
 
 
-def quality_trim(fp_in, folder_out, min_qual):
+def quality_trim(fp_in, folder_out, min_qual, min_len=30):
     """Trim a FASTQ to a minimum quality score."""
     assert os.path.exists(fp_in)
     assert fp_in.endswith(".gz") is False
@@ -140,6 +140,7 @@ def quality_trim(fp_in, folder_out, min_qual):
         "-t", str(min_qual),
         "-i", fp_in,
         "-o", fp_out,
+        "-l", str(min_len),
         "-v"
     ])
 

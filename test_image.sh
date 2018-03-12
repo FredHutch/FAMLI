@@ -39,6 +39,7 @@ test_image(){
 				--ref-db /share/refdb.dmnd \
 				--output-folder /share/ \
 				--temp-folder /share/ \
+				--min-qual 20 \
 				--batchsize 50000
 
 }
