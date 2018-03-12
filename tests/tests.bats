@@ -1,8 +1,12 @@
 #!/usr/bin/env bats
 
-@test "SRA Toolkit v2.8.2" {
-  v="$(fastq-dump --version)"
-  [[ "$v" =~ "2.8.2" ]]
+@test "Aspera Connect" {
+  v="$(ascp --version)"
+  [[ "$v" =~ "3.7.4.147727" ]]
+}
+
+@test "Aspera Connect Key File" {
+  [[ -s $ASPERA_KEY ]]
 }
 
 @test "FASTX Toolkit 0.0.13" {

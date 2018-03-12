@@ -150,20 +150,48 @@ def quality_trim(fp_in, folder_out, min_qual):
 
 def get_sra(accession, temp_folder):
     """Get the FASTQ for an SRA accession."""
-    local_path = os.path.join(temp_folder, accession + ".fastq")
-
     logging.info("Downloading {} from SRA".format(accession))
+
+    local_path = os.path.join(temp_folder, accession + ".fastq")
+    logging.info("Local path: {}".format(local_path))
+
+    # Format the remote path for the SRA file
+    remote_path = "anonftp@ftp.ncbi.nlm.nih.gov:/sra/sra-instant/reads/ByRun"
+    remote_path = "{}/sra/{first_three}/{first_six}/{acc}/{acc}.sra".format(
+        remote_path,
+        first_three=accession[:3],
+        first_six=accession[:6],
+        acc=accession)
+    logging.info("Remote path: {}".format(remote_path))
+
+    # Download the SRA file via Aspera Connect
+    logging.info("Downloading with Aspera Connect")
+
+    # The key for Aspera Connect must be present
+    msg = "Must set ASPERA_KEY to Aspera key file"
+    assert os.path.exists(os.environ["ASPERA_KEY"]), msg
+
+    run_cmds([
+        "ascp", "-i",
+        os.environ["ASPERA_KEY"],
+        "-k", "1", "-T", "-l200m",
+        remote_path,
+        temp_folder
+    ])
+
+    # Make sure that the file was downloaded
+    assert os.path.exists(local_path.replace(".fastq", ".sra"))
+
+    # Convert the SRA file to FASTQ
+    logging.info("Converting to FASTQ")
     run_cmds([
         "fastq-dump",
         "--split-files",
         "--outdir",
-        temp_folder, accession
+        temp_folder, local_path.replace(".fastq", ".sra")
     ])
     logging.info("Remove temporary SRA files")
-    run_cmds([
-        "rm", "-f",
-        "/root/ncbi/public/sra/{}*".format(accession)
-    ])
+    os.unlink(local_path.replace(".fastq", ".sra"))
 
     # Combine any multiple files that were found
     logging.info("Concatenating output files")
