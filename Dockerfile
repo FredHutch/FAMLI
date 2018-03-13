@@ -38,24 +38,6 @@ RUN cd /usr/local/bin && \
 	rm sratoolkit.2.8.2-ubuntu64.tar.gz
 
 
-# Make a user to install Aspera Connect
-RUN useradd -ms /bin/bash user && \
-	usermod -g root user && \
-	chmod g+w /usr/local/bin
-USER user
-
-# Install Aspera Connect
-RUN cd /usr/local/bin && \
-	wget -q https://download.asperasoft.com/download/sw/connect/3.7.4/aspera-connect-3.7.4.147727-linux-64.tar.gz && \
-	tar xzvf aspera-connect-3.7.4.147727-linux-64.tar.gz && \
-	bash aspera-connect-3.7.4.147727-linux-64.sh
-
-# Set the ASPERA_KEY environment variable
-ENV ASPERA_KEY=/home/user/.aspera/connect/etc/asperaweb_id_dsa.openssh
-
-USER root
-RUN ln -s /home/user/.aspera/connect/bin/* /usr/local/bin/
-
 # Install the FASTX Toolkit
 RUN cd /usr/local/bin && \
 	wget -q http://hannonlab.cshl.edu/fastx_toolkit/fastx_toolkit_0.0.13_binaries_Linux_2.6_amd64.tar.bz2 && \

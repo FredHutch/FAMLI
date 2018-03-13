@@ -15,6 +15,7 @@ from famli.exec_helpers import return_results
 from famli.exec_helpers import exit_and_clean_up
 from famli.exec_helpers import get_reference_database
 from famli.fastq_helpers import get_reads_from_url
+from famli.fastq_helpers import set_up_sra_cache_folder
 from famli.fastq_helpers import count_fastq_reads
 from famli.fastq_helpers import combine_fastqs
 from famli.famli_helpers import parse_alignment
@@ -136,6 +137,9 @@ class FAMLI:
             )
         except:
             exit_and_clean_up(temp_folder)
+
+        # Set up the NCBI fastq-dump cache folder within the temp folder
+        set_up_sra_cache_folder(temp_folder)
 
         logging.info("Reference database: " + db_fp)
 

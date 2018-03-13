@@ -5,6 +5,7 @@ import re
 import os
 import gzip
 import uuid
+import shutil
 import logging
 import subprocess
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
@@ -36,6 +37,39 @@ def combine_fastqs(fps_in, fp_out):
                             fo.write("{}-{}\n".format(line, fp_ix))
                         else:
                             fo.write(line)
+
+
+def set_up_sra_cache_folder(temp_folder):
+    """Set up the fastq-dump cache folder within the temp folder."""
+    logging.info("Setting up fastq-dump cache within {}".format(temp_folder))
+    for path in [
+        "/root/ncbi",
+        "/root/ncbi/public"
+    ]:
+        if os.path.exists(path) is False:
+            os.mkdir(path)
+
+    if os.path.exists("/root/ncbi/public/sra"):
+        shutil.rmtree("/root/ncbi/public/sra")
+
+    # Now make a folder within the temp folder
+    temp_cache = os.path.join(temp_folder, "sra")
+    assert os.path.exists(temp_cache) is False
+    os.mkdir(temp_cache)
+
+    for folder in [
+        "/root/ncbi",
+        "/root/ncbi/public",
+        "/root/ncbi/public/sra",
+        temp_cache
+    ]:
+        logging.info(folder)
+        logging.info(os.path.exists(folder))
+
+    # Symlink it to /root/ncbi/public/sra/
+    run_cmds(["ln", "-s", "-f", temp_cache, "/root/ncbi/public/sra"])
+
+    assert os.path.exists("/root/ncbi/public/sra")
 
 
 def get_reads_from_url(
@@ -156,43 +190,24 @@ def get_sra(accession, temp_folder):
     local_path = os.path.join(temp_folder, accession + ".fastq")
     logging.info("Local path: {}".format(local_path))
 
-    # Format the remote path for the SRA file
-    remote_path = "anonftp@ftp.ncbi.nlm.nih.gov:/sra/sra-instant/reads/ByRun"
-    remote_path = "{}/sra/{first_three}/{first_six}/{acc}/{acc}.sra".format(
-        remote_path,
-        first_three=accession[:3],
-        first_six=accession[:6],
-        acc=accession)
-    logging.info("Remote path: {}".format(remote_path))
-
-    # Download the SRA file via Aspera Connect
-    logging.info("Downloading with Aspera Connect")
-
-    # The key for Aspera Connect must be present
-    msg = "Must set ASPERA_KEY to Aspera key file"
-    assert os.path.exists(os.environ["ASPERA_KEY"]), msg
-
+    # Download via fastq-dump
+    logging.info("Downloading via fastq-dump")
     run_cmds([
-        "ascp", "-i",
-        os.environ["ASPERA_KEY"],
-        "-k", "1", "-T", "-l200m",
-        remote_path,
-        temp_folder
+        "prefetch", accession
     ])
-
-    # Make sure that the file was downloaded
-    assert os.path.exists(local_path.replace(".fastq", ".sra"))
-
-    # Convert the SRA file to FASTQ
-    logging.info("Converting to FASTQ")
     run_cmds([
         "fastq-dump",
         "--split-files",
         "--outdir",
-        temp_folder, local_path.replace(".fastq", ".sra")
+        temp_folder, accession
     ])
-    logging.info("Remove temporary SRA files")
-    os.unlink(local_path.replace(".fastq", ".sra"))
+
+    # Make sure that some files were created
+    msg = "File could not be downloaded from SRA: {}".format(accession)
+    assert any([
+        fp.startswith(accession) and fp.endswith("fastq")
+        for fp in os.listdir(temp_folder)
+    ]), msg
 
     # Combine any multiple files that were found
     logging.info("Concatenating output files")
@@ -201,13 +216,21 @@ def get_sra(accession, temp_folder):
         cat = subprocess.Popen(cmd, shell=True, stdout=fo)
         cat.wait()
 
-    # Clean up the FASTQ headers for the downloaded file
-    if os.path.exists(local_path + ".temp"):
-        run_cmds(["mv", local_path + ".temp", local_path])
+    # Remove the temp files
+    for fp in os.listdir(temp_folder):
+        if fp.startswith(accession) and fp.endswith("fastq"):
+            fp = os.path.join(temp_folder, fp)
+            logging.info("Removing {}".format(fp))
+            os.unlink(fp)
 
-    # Check to see if the file was downloaded
-    msg = "File could not be downloaded from SRA: {}".format(accession)
-    assert os.path.exists(local_path), msg
+    # Remove the cache file, if any
+    cache_fp = "/root/ncbi/public/sra/{}.sra".format(accession)
+    if os.path.exists(cache_fp):
+        logging.info("Removing {}".format(cache_fp))
+        os.unlink(cache_fp)
+
+    # Clean up the FASTQ headers for the downloaded file
+    run_cmds(["mv", local_path + ".temp", local_path])
 
     # Return the path to the file
     logging.info("Done fetching " + accession)
