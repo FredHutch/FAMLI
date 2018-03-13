@@ -213,7 +213,7 @@ class FAMLI:
         # Count the total number of reads
         logging.info("Counting the total number of reads")
         n_reads = count_fastq_reads(read_fp)
-        logging.info("Reads in input file: {}".format(n_reads))
+        logging.info("Reads in input file: {:,}".format(n_reads))
 
         # Read in the logs
         logging.info("Reading in the logs")
