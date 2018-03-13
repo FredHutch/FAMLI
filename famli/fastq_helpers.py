@@ -57,15 +57,6 @@ def set_up_sra_cache_folder(temp_folder):
     assert os.path.exists(temp_cache) is False
     os.mkdir(temp_cache)
 
-    for folder in [
-        "/root/ncbi",
-        "/root/ncbi/public",
-        "/root/ncbi/public/sra",
-        temp_cache
-    ]:
-        logging.info(folder)
-        logging.info(os.path.exists(folder))
-
     # Symlink it to /root/ncbi/public/sra/
     run_cmds(["ln", "-s", "-f", temp_cache, "/root/ncbi/public/sra"])
 
