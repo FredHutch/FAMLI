@@ -268,9 +268,9 @@ class FAMLI_Reassignment:
                 self.aln_prob[query][subject] = v
                 self.aln_prob_T[subject][query] = v
 
-    def trim_least_likely(self, scale=0.9):
+    def trim_least_likely(self, percentile_cutoff=90):
         """Remove the least likely alignments."""
-        logging.info("Removing alignments below {} of the max".format(scale))
+        logging.info("Removing alignments below {} percentile likelihood".format(percentile_cutoff))
         n_trimmed = 0
         newly_unique_queries = set([])
         for query in self.multimapped_queries:
@@ -281,12 +281,14 @@ class FAMLI_Reassignment:
                 self.n_unique += 1
                 continue
             # Figure out our maximum score for this query
-            max_likely = max(list(aln_prob.values()))
+            percentile_cutoff_val = np.percentile(
+                list(aln_prob.values()),
+                percentile_cutoff)
 
             # Trim anyone BELOW the maximum possible value for this query.
             to_remove = [
                 subject for subject, prob in aln_prob.items()
-                if prob < scale * max_likely
+                if prob < percentile_cutoff_val
             ]
 
             n_trimmed += len(to_remove)
@@ -361,12 +363,13 @@ def parse_alignment(align_handle,
                     SD_MEAN_CUTOFF=1.0,
                     STRIM_5=18,
                     STRIM_3=18,
+                    PERCENTILE_CUTOFF=90,
                     threads=4,
                     MAX_ITERATIONS=1000):
     """
     Parse an alignment in BLAST6 format and determine which subjects are likely to be present. This is the core of FAMLI.
     BLAST 6 columns by default (in order): qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen slen
-                                              0     1       2       3       4       5       6   7   8       9   10      11      12   13  
+                                              0     1       2       3       4       5       6   7   8       9   10      11      12   13
     """
     # Initialize the multithreading pool before reading in the alignments
     pool = Pool(threads)
@@ -459,7 +462,7 @@ def parse_alignment(align_handle,
             model.recalc_aln_prob()
 
             # Trim the least likely alignment for each read
-            n_trimmed = model.trim_least_likely()
+            n_trimmed = model.trim_least_likely(PERCENTILE_CUTOFF)
 
             if n_trimmed == 0:
                 break
