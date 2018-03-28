@@ -59,8 +59,8 @@ assert output["deduplicated_reads"] == 155, output["deduplicated_reads"]
 assert output["output_folder"] == "/usr/famli/tests", output["output_folder"]
 assert output["input_path"] == "/usr/famli/tests/example.fastq", output["input_path"]
 
-# THREE references now have deduplicated reads
-assert len(output["results"]) == 3, len(output["results"])
+# TWO references now have deduplicated reads
+assert len(output["results"]) == 2, len(output["results"])
 
 # MULTIPLE INPUT FILES, COMBINED
 
@@ -88,12 +88,12 @@ output = json.load(gzip.open("/usr/famli/tests/combined.json.gz"))
 assert output["aligned_reads"] == 676, output["aligned_reads"]
 assert output["total_reads"] == 720, output["total_reads"]
 assert output["ref_db"] == "/usr/famli/tests/refdb.dmnd", output["ref_db"]
-assert output["deduplicated_reads"] == 507, output["deduplicated_reads"]
+assert output["deduplicated_reads"] == 311, output["deduplicated_reads"]
 assert output["output_folder"] == "/usr/famli/tests", output["output_folder"]
 assert output["input_path"] == input_fps, output["input_path"]
 
 # THREE references now have deduplicated reads
-assert len(output["results"]) == 3, len(output["results"])
+assert len(output["results"]) == 2, len(output["results"])
 
 # Just run the 'filter' module
 p = subprocess.Popen([
