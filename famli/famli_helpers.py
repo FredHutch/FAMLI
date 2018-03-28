@@ -275,6 +275,9 @@ class FAMLI_Reassignment:
         newly_unique_queries = set([])
         for query in self.multimapped_queries:
             aln_prob = self.aln_prob[query]
+            # Skip queries with no remaining alignments
+            if len(aln_prob) == 0:
+                continue
             # Skip queries with only a single possible subject
             if len(aln_prob) == 1:
                 newly_unique_queries.add(query)
