@@ -363,9 +363,9 @@ def parse_alignment(align_handle,
                     SD_MEAN_CUTOFF=1.0,
                     STRIM_5=18,
                     STRIM_3=18,
-                    PERCENTILE_CUTOFF=90,
                     threads=4,
-                    MAX_ITERATIONS=1000):
+                    MAX_ITERATIONS=1000,
+                    PERCENTILE_CUTOFF=90):
     """
     Parse an alignment in BLAST6 format and determine which subjects are likely to be present. This is the core of FAMLI.
     BLAST 6 columns by default (in order): qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen slen
