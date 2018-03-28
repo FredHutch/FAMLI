@@ -275,6 +275,9 @@ class FAMLI_Reassignment:
         newly_unique_queries = set([])
         for query in self.multimapped_queries:
             aln_prob = self.aln_prob[query]
+            # Skip queries with NO remaining alignments
+            if len(aln_prob) == 0:
+                continue
             # Skip queries with only a single possible subject
             if len(aln_prob) == 1:
                 newly_unique_queries.add(query)
@@ -283,7 +286,8 @@ class FAMLI_Reassignment:
             # Figure out our maximum score for this query
             percentile_cutoff_val = np.percentile(
                 list(aln_prob.values()),
-                percentile_cutoff)
+                percentile_cutoff
+                )
 
             # Trim anyone BELOW the maximum possible value for this query.
             to_remove = [
