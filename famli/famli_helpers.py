@@ -186,14 +186,17 @@ class FAMLI_Reassignment:
                         dtype=np.float
                     )
                 coverage[subject][sstart: send] += alignment_weight
-        
+
         # Return the set of subjects that are below the evenness cutoff
-        return set([
-            subject
-            for subject, cov in coverage.items()
-            if cov.std() / cov.mean() <= self.SD_MEAN_CUTOFF
-        ])
-        
+        to_keep = set([])
+        for subject, cov in coverage.items():
+            # Trim the ends
+            if cov.shape[0] >= 46:
+                cov = cov[18: -18]
+            if cov.std() / cov.mean() <= self.SD_MEAN_CUTOFF:
+                to_keep.add(subject)
+
+        return to_keep
 
     def parse(self, align_handle):
         """Parse a set of reads, optimizing as we go."""
