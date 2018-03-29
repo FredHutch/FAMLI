@@ -18,7 +18,7 @@ from famli.fastq_helpers import get_reads_from_url
 from famli.fastq_helpers import set_up_sra_cache_folder
 from famli.fastq_helpers import count_fastq_reads
 from famli.fastq_helpers import combine_fastqs
-from famli.famli_helpers import parse_alignment
+from famli.famli_helpers import FAMLI_Reassignment
 
 
 class FAMLI:
@@ -87,7 +87,7 @@ class FAMLI:
         parser.add_argument("--threads",
                             type=int,
                             default=16,
-                            help="Number of threads to use aligning.")
+                            help="Number of threads to use.")
         parser.add_argument("--min-qual",
                             type=int,
                             default=None,
@@ -190,11 +190,10 @@ class FAMLI:
 
         # Process the alignments, reassigning multi-mapped reads
         try:
+            famli = FAMLI_Reassignment(threads=args.threads)
             with open(align_fp, "rt") as align_handle:
-                aligned_reads, abund = parse_alignment(
-                    align_handle,
-                    batchsize=args.batchsize,
-                )
+                famli.parse(align_handle)
+            aligned_reads, abund = famli.summary()
         except:
             exit_and_clean_up(temp_folder)
 
@@ -349,20 +348,18 @@ class FAMLI:
         else:
             f = open(args.input, "rt")
 
-        aligned_reads, output = parse_alignment(
-            f,
+        famli = FAMLI_Reassignment(
+            threads=args.threads,
             QSEQID_i=args.qseqid_ix,
             SSEQID_i=args.sseqid_ix,
             SSTART_i=args.sstart_ix,
             SEND_i=args.send_ix,
             BITSCORE_i=args.bitscore_ix,
             SLEN_i=args.slen_ix,
-            SD_MEAN_CUTOFF=args.sd_mean_cutoff,
-            STRIM_5=args.strim_5,
-            STRIM_3=args.strim_3,
-            threads=args.threads,
-            batchsize=args.batchsize,
-        )
+            SD_MEAN_CUTOFF=args.sd_mean_cutoff
+            )
+        famli.parse(f)
+        aligned_reads, output = famli.summary()
 
         f.close()
 

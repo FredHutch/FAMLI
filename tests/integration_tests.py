@@ -25,7 +25,7 @@ output = json.load(gzip.open("/usr/famli/tests/example1.json.gz"))
 assert output["aligned_reads"] == 338, output["aligned_reads"]
 assert output["total_reads"] == 360, output["total_reads"]
 assert output["ref_db"] == "/usr/famli/tests/refdb.dmnd", output["ref_db"]
-assert output["deduplicated_reads"] == 154, output["deduplicated_reads"]
+assert output["deduplicated_reads"] == 224, output["deduplicated_reads"]
 assert output["output_folder"] == "/usr/famli/tests", output["output_folder"]
 assert output["input_path"] == "/usr/famli/tests/example.fastq", output["input_path"]
 
@@ -55,7 +55,7 @@ output = json.load(gzip.open("/usr/famli/tests/example2.json.gz"))
 assert output["aligned_reads"] == 338, output["aligned_reads"]
 assert output["total_reads"] == 360, output["total_reads"]
 assert output["ref_db"] == "/usr/famli/tests/refdb.dmnd", output["ref_db"]
-assert output["deduplicated_reads"] == 253, output["deduplicated_reads"]
+assert output["deduplicated_reads"] == 322, output["deduplicated_reads"]
 assert output["output_folder"] == "/usr/famli/tests", output["output_folder"]
 assert output["input_path"] == "/usr/famli/tests/example.fastq", output["input_path"]
 
@@ -88,7 +88,7 @@ output = json.load(gzip.open("/usr/famli/tests/combined.json.gz"))
 assert output["aligned_reads"] == 676, output["aligned_reads"]
 assert output["total_reads"] == 720, output["total_reads"]
 assert output["ref_db"] == "/usr/famli/tests/refdb.dmnd", output["ref_db"]
-assert output["deduplicated_reads"] == 507, output["deduplicated_reads"]
+assert output["deduplicated_reads"] == 644, output["deduplicated_reads"]
 assert output["output_folder"] == "/usr/famli/tests", output["output_folder"]
 assert output["input_path"] == input_fps, output["input_path"]
 
@@ -111,7 +111,7 @@ assert exitcode == 0
 output = json.load(open("/usr/famli/tests/example3.json", "rt"))
 n_dedup = sum([d["nreads"] for d in output])
 
-assert n_dedup == 359, n_dedup
+assert n_dedup == 360, n_dedup
 
 # Three references survived filtering
 assert len(output) == 3

@@ -28,12 +28,6 @@
   [[ "$h" =~ "FAMLI" ]]
 }
 
-@test "Parse the alignments in batches" {
-  h="$(python /usr/famli/famli/test_alignment_batchsize.py)"
-
-  [[ "$h" =~ "PASSED TESTS" ]]
-}
-
 @test "Parse the alignments" {
   h="$(python /usr/famli/famli/test_parse_alignments.py)"
 

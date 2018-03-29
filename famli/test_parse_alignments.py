@@ -1,14 +1,16 @@
 #!/usr/bin/python
 
-from famli_helpers import parse_alignment
+from famli_helpers import FAMLI_Reassignment
 
+famli = FAMLI_Reassignment()
 with open("/usr/famli/tests/example.diamond.aln", "rt") as f:
-    n_reads, output = parse_alignment(f)
+    famli.parse(f)
+    n_reads, output = famli.summary()
 
 n_dedup = sum([d["nreads"] for d in output])
 
 assert n_reads == 360, n_reads
-assert n_dedup == 359, n_dedup
+assert n_dedup == 360, n_dedup
 
 # Three references survived filtering
 assert len(output) == 3
