@@ -117,7 +117,7 @@ class FAMLI_Reassignment:
     def __init__(
         self,
         threads=4,
-        burn_in=1000000,
+        burn_in=10000000,
         SD_MEAN_CUTOFF=1.0,
         QSEQID_i=0,
         SSEQID_i=1,
@@ -193,7 +193,7 @@ class FAMLI_Reassignment:
             # Trim the ends
             if cov.shape[0] >= 46:
                 cov = cov[18: -18]
-            if cov.std() / cov.mean() <= self.SD_MEAN_CUTOFF:
+            if cov.max() > 0 and cov.std() / cov.mean() <= self.SD_MEAN_CUTOFF:
                 to_keep.add(subject)
 
         return to_keep
