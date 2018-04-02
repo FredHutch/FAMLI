@@ -117,7 +117,6 @@ class FAMLI_Reassignment:
     def __init__(
         self,
         threads=4,
-        burn_in=10000000,
         SD_MEAN_CUTOFF=1.0,
         QSEQID_i=0,
         SSEQID_i=1,
@@ -128,31 +127,22 @@ class FAMLI_Reassignment:
         SLEN_i=13,
     ):
 
-        # Number of reads to process before optimizing
-        self.burn_in = burn_in
-
         # Threshold to prune unlikely alignments
         self.SD_MEAN_CUTOFF = SD_MEAN_CUTOFF
-
-        # Pool of workers
-        # self.pool = Pool(threads)
 
         # Keep track of the weight for every subject
         self.subject_weight = defaultdict(float)
 
-        # Keep track of the bitscore for each query ~ subject
-        self.query_bitscore = defaultdict(dict)
-
-        # Keep track of the alignments for every query (sstart, send)
-        self.alignments = defaultdict(dict)
+        # Keep track of the coverage vectors per subject
+        self.coverage = {}
 
         # Number of total and uniquely aligned queries
         self.n_queries = 0
         self.n_unique = 0
 
-        # Keep a flag indicating whether any suboptimal alignments have been pruned
-        self.any_pruned = False
-        
+        # Keep track of the number of reads per subject
+        self.subject_n_reads = defaultdict(int)
+
         # Column index values
         self.QSEQID_i = QSEQID_i
         self.SSEQID_i = SSEQID_i
@@ -198,14 +188,52 @@ class FAMLI_Reassignment:
 
         return to_keep
 
+    def calc_init_subject_weights(self, align_handle):
+        """Calculate the initial set of subject weights."""
+        # Set up the parser
+        self.alignment_parser = BLAST6Parser(
+            QSEQID_i = self.QSEQID_i,
+            SSEQID_i = self.SSEQID_i,
+            SSTART_i = self.SSTART_i,
+            SEND_i = self.SEND_i,
+            EVALUE_i = self.EVALUE_i,
+            BITSCORE_i = self.BITSCORE_i,
+            SLEN_i = self.SLEN_i
+        )
+        for query_alignments in self.alignment_parser.yield_queries(align_handle):
+            # Filter to the subjects passing FILTER 1
+            query_alignments = [
+                a for a in query_alignments
+                if a[1] in self.filter_1_subjects
+            ]
+
+            # Skip if no subjects pass filter 1
+            if len(query_alignments) == 0:
+                continue
+
+            # Adjust the bitscores to add up to 1
+            tot_bitscore = np.sum([a[4] for a in query_alignments])
+
+            # Add those bitscores to the running totals
+            for _, subject, _, _, bitscore in query_alignments:
+                # Weights sum to 1
+                bitscore = bitscore / tot_bitscore
+                
+                # Subject weight
+                self.subject_weight[subject] += bitscore
+
     def parse(self, align_handle):
         """Parse a set of reads, optimizing as we go."""
 
         # Get the subjects which pass the first evenness filter
-        filter_1_subjects = self.filter_subjects_evenness(align_handle)
+        self.filter_1_subjects = self.filter_subjects_evenness(align_handle)
         logging.info("Subjects passing FILTER 1: {:,}".format(
-            len(filter_1_subjects)
+            len(self.filter_1_subjects)
         ))
+
+        # Get the initial weights for those subjects passing filter 1
+        align_handle.seek(0)
+        self.calc_init_subject_weights(align_handle)
 
         # Now go through and greedily assign reads to subjects
         self.alignment_parser = BLAST6Parser(
@@ -219,165 +247,91 @@ class FAMLI_Reassignment:
         )
         align_handle.seek(0)
         for query_alignments in self.alignment_parser.yield_queries(align_handle):
+            # Increment the number of total queries
+            self.n_queries += 1
+
+            # Calculate the likelihood for each subject
             # Filter to the subjects passing FILTER 1
-            query_alignments = [
-                a for a in query_alignments
-                if a[1] in filter_1_subjects
-            ]
+            # Likelihood = bitscore * subject weight / subject length
+            likelihood = {
+                subject: bitscore * self.subject_weight[subject] / self.alignment_parser.subject_len[subject]
+                for _, subject, _, _, bitscore in query_alignments
+                if subject in self.filter_1_subjects
+            }
 
             # Skip if no subjects pass filter 1
-            if len(query_alignments) == 0:
+            if len(likelihood) == 0:
                 continue
 
-            # Adjust the bitscores to add up to 1
-            tot_bitscore = np.sum([a[4] for a in query_alignments])
+            # Maximum likelihood value
+            max_likelihood = max(likelihood.values())
 
-            # Add those bitscores to the running totals
-            for query_name, subject, sstart, send, bitscore in query_alignments:
+            # Sum of bitscores
+            tot_bitscore = sum([
+                bitscore
+                for _, subject, _, _, bitscore in query_alignments
+                if subject in self.filter_1_subjects
+            ])
+
+            # Skip if more than one subject has the top hit
+            if sum([v == max_likelihood for v in likelihood.values()]) != 1:
+                continue
+
+            # Assign the query to the most likely subject
+            for _, subject, sstart, send, bitscore in query_alignments:
+                # Skip subject not passing filter 1
+                if subject not in self.filter_1_subjects:
+                    continue
+
                 # Weights sum to 1
                 bitscore = bitscore / tot_bitscore
                 
-                # Subject weight
-                self.subject_weight[subject] += bitscore
-                # Query ~ subject bitscore
-                self.query_bitscore[query_name][subject] = bitscore
-                # Add the alignment information
-                self.alignments[query_name][subject] = (sstart, send)
+                # This is the TOP HIT
+                if likelihood[subject] == max_likelihood:
+                    # Increment the counter of unique reads
+                    self.n_unique += 1
 
-            # Add to the counter for total queries
-            self.n_queries += 1
+                    # Adjust the subject weight
+                    self.subject_weight[subject] += (1 - bitscore)
 
-            # Keep track of uniquely aligned queries
-            if len(query_alignments) == 1:
-                self.n_unique += 1
+                    # Add to the coverage vectors
+                    if subject not in self.coverage:
+                        self.coverage[subject] = np.zeros(
+                            int(self.alignment_parser.subject_len[subject]),
+                            dtype=int
+                        )
 
-            # If we're past the burn-in, try to optimize this query
-            if self.n_queries > self.burn_in:
-                self.optimize_one_query(query_name)
-            # If we've just now reached the end of the burn-in, optimize everything
-            elif self.n_queries == self.burn_in:
-                logging.info("Finished burn-in of {:,} queries".format(self.burn_in))
-                self.optimize_all()
+                    # Increment the coverage vector
+                    self.coverage[subject][sstart: send] += 1
+
+                    # Increment the read counter
+                    self.subject_n_reads[subject] += 1
+
+                else:
+                    # This is a suboptimal hit
+                    self.subject_weight[subject] -= bitscore
+
+            if self.n_queries % 100000 == 0:
                 logging.info("Total queries read in: {:,}".format(self.n_queries))
                 logging.info("Uniquely aligned queries: {:,}".format(self.n_unique))
 
-            # Otherwise, just keep on adding queries
-
-        # Once all queries have been added, keep optimizing until no longer possible
-        n_rounds = 1
-        logging.info("Number of unique queries: {:,}".format(self.n_unique))
-        while n_rounds <= 1000:
-            self.any_pruned = False
-            logging.info("Round {:,}: Reassigning multi-mapped queries".format(n_rounds))
-            self.optimize_all()
-            logging.info("Number of unique queries: {:,}".format(self.n_unique))
-            n_rounds += 1
-            if self.any_pruned is False:
-                break
         logging.info("Done reassigning reads")
-
-    def optimize_one_query(self, query_name):
-        """Remove suboptimal alignments for a single query."""
-
-        # Only optimize if there is more than one possible subject
-        if len(self.alignments[query_name]) == 1:
-            return
-
-        # Get the likelihoods for this query
-        # Likelihood = bitscore * evenness score * total reference weight / reference length
-        likelihoods = {
-            subject: bitscore * self.subject_weight[subject] / self.alignment_parser.subject_len[subject]
-            for subject, bitscore in self.query_bitscore[query_name].items()
-        }
-        # Calculate the maximum likelihood
-        max_likelihood = np.max(likelihoods.values())
-
-        # Get the bitscores for those subjects with likelihoods above the threshold
-        new_bitscores = {
-            subject: bitscore
-            for subject, bitscore in self.query_bitscore[query_name].items()
-            if likelihoods[subject] >= max_likelihood
-        }
-
-        assert len(new_bitscores) > 0
-
-        # If none of the subjects are removed, don't do anything
-        if len(new_bitscores) == len(self.query_bitscore[query_name]):
-            return
-        else:
-            # Flag indicating that a suboptimal alignment was pruned
-            self.any_pruned = True
-
-            # Adjust the new bitscores to sum to 1
-            new_bitscore_sum = np.sum(new_bitscores.values())
-            new_bitscores = {
-                subject: bitscore / new_bitscore_sum
-                for subject, bitscore in new_bitscores.items()
-            }
-
-            # Newly unique query
-            if len(new_bitscores) == 1:
-                self.n_unique += 1
-
-            # Now adjust the subject weights
-            for subject, old_bitscore in self.query_bitscore[query_name].items():
-                # If this subject has been eliminated
-                if subject not in new_bitscores:
-                    # Lower the total score by the amount for this query
-                    new_score = self.subject_weight[subject] - old_bitscore
-
-                    # Remove the alignment information
-                    sstart, send = self.alignments[query_name][subject]
-
-                    # Remove the coverage information
-                    del self.alignments[query_name][subject]
-                else:
-                    # Calculate the new score based on the change in this query's contribution
-                    new_score = self.subject_weight[subject] + new_bitscores[subject] - old_bitscore
-
-                # Assign the new score
-                self.subject_weight[subject] = new_score
-
-            # And update the per-query bitscores
-            self.query_bitscore[query_name] = new_bitscores
-
-    def optimize_all(self):
-        """Remove suboptimal alignments for all queries."""
-        logging.info("Optimizing all {:,} queries".format(self.n_queries))
-
-        for query_name in self.query_bitscore.keys():
-            self.optimize_one_query(query_name)
 
     def summary(self):
         """Calculate coverage metrics for every reference."""
-
-        # Calculate the coverage using uniquely assigned queries
-        coverage = {}
-        nreads = defaultdict(int)
-
-        for query_name, bitscores in self.query_bitscore.items():
-            if len(bitscores) != 1:
-                continue
-            subject = list(bitscores.keys())[0]
-            sstart, send = self.alignments[query_name][subject]
-
-            if subject not in coverage:
-                slen = self.alignment_parser.subject_len[subject]
-                coverage[subject] = np.zeros(int(slen), dtype=int)
-            
-            coverage[subject][sstart: send] += 1
-            nreads[subject] += 1
         
         # Output the coverage metrics
         output = [{
                 "id": subject,
                 "nreads": n,
-                "depth": coverage[subject].mean(),
-                "std": coverage[subject].std(),
+                "depth": self.coverage[subject].mean(),
+                "std": self.coverage[subject].std(),
                 "length": self.alignment_parser.subject_len[subject]
             }
-            for subject, n in nreads.items()
+            for subject, n in self.subject_n_reads.items()
         ]
+
+        assert sum([a["nreads"] for a in output]) == self.n_unique
 
         logging.info("Number of queries passing FILTER 2: {:,}".format(
             sum([a["nreads"] for a in output])
@@ -399,4 +353,4 @@ class FAMLI_Reassignment:
             len(output)
         ))
 
-        return self.alignment_parser.n_unique_queries, output
+        return self.n_queries, output
