@@ -10,6 +10,7 @@ import json
 import shutil
 import logging
 import argparse
+from famli.exec_helpers import run_cmds
 from famli.exec_helpers import align_reads
 from famli.exec_helpers import return_results
 from famli.exec_helpers import exit_and_clean_up
@@ -131,6 +132,10 @@ class FAMLI:
         consoleHandler = logging.StreamHandler()
         consoleHandler.setFormatter(logFormatter)
         rootLogger.addHandler(consoleHandler)
+
+        # Check to see if DIAMOND is available
+        logging.info("Checking for a working copy of DIAMOND")
+        run_cmds(["diamond", "--version"])
 
         # Get the reference database
         try:
