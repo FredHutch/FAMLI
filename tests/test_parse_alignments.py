@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from famli_helpers import parse_alignment
+from famli.famli_helpers import parse_alignment
 
 with open("/usr/famli/tests/example.diamond.aln", "rt") as f:
     n_reads, output = parse_alignment(f)

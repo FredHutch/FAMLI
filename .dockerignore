@@ -2,3 +2,4 @@ temp/
 tests/GCF*
 tests/diamond*
 *ipynb
+venv/

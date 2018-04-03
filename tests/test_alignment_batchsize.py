@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from famli_helpers import BLAST6Parser
+from famli.famli_helpers import BLAST6Parser
 
 parser = BLAST6Parser()
 

@@ -10,6 +10,7 @@ import json
 import shutil
 import logging
 import argparse
+from famli.exec_helpers import run_cmds
 from famli.exec_helpers import align_reads
 from famli.exec_helpers import return_results
 from famli.exec_helpers import exit_and_clean_up
@@ -32,16 +33,19 @@ class FAMLI:
 
         parser.add_argument("command", help="""Command to run: align or filter. Invoke
             famli.py <command> -h for further details""")
-        args = parser.parse_args(sys.argv[1:2])
-
-        # Run the command that was specified
-        if args.command == "align":
-            self.align()
-        elif args.command == "filter":
-            self.filter()
-        else:
+        if len(sys.argv) < 2:
             parser.print_help()
-            print("Unrecognized command")
+        else:
+            args = parser.parse_args(sys.argv[1:2])
+
+            # Run the command that was specified
+            if args.command == "align":
+                self.align()
+            elif args.command == "filter":
+                self.filter()
+            else:
+                parser.print_help()
+                print("Unrecognized command")
 
     def align(self):
         """Align a set of reads with DIAMOND and run FAMLI."""
@@ -129,6 +133,10 @@ class FAMLI:
         consoleHandler.setFormatter(logFormatter)
         rootLogger.addHandler(consoleHandler)
 
+        # Check to see if DIAMOND is available
+        logging.info("Checking for a working copy of DIAMOND")
+        run_cmds(["diamond", "--version"])
+
         # Get the reference database
         try:
             db_fp = get_reference_database(
@@ -213,7 +221,7 @@ class FAMLI:
         # Count the total number of reads
         logging.info("Counting the total number of reads")
         n_reads = count_fastq_reads(read_fp)
-        logging.info("Reads in input file: {}".format(n_reads))
+        logging.info("Reads in input file: {:,}".format(n_reads))
 
         # Read in the logs
         logging.info("Reading in the logs")
@@ -372,6 +380,11 @@ class FAMLI:
 
         elapsed = round(time.time() - start_time, 2)
         logging.info("Time elapsed: {:,}".format(elapsed))
+
+
+def main():
+    """Entrypoint for main script."""
+    FAMLI()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-#!/bin/python
+#!/usr/bin/python
 
 import gzip
 import json
@@ -7,7 +7,7 @@ import subprocess
 # Run the entire process on the test data
 
 p = subprocess.Popen([
-    "famli.py",
+    "famli",
     "align",
     "--input", "/usr/famli/tests/example.fastq",
     "--sample-name", "example1",
@@ -36,7 +36,7 @@ assert len(output["results"]) == 2, len(output["results"])
 
 # Run the same tests with quality trimming
 p = subprocess.Popen([
-    "famli.py",
+    "famli",
     "align",
     "--input", "/usr/famli/tests/example.fastq",
     "--sample-name", "example2",
@@ -68,7 +68,7 @@ input_fps = "/usr/famli/tests/example.fastq+/usr/famli/tests/example2.fastq"
 
 # Run the same tests with quality trimming
 p = subprocess.Popen([
-    "famli.py",
+    "famli",
     "align",
     "--input",
     input_fps,
@@ -97,7 +97,7 @@ assert len(output["results"]) == 3, len(output["results"])
 
 # Just run the 'filter' module
 p = subprocess.Popen([
-    "famli.py",
+    "famli",
     "filter",
     "--input",
     "/usr/famli/tests/example.diamond.aln",

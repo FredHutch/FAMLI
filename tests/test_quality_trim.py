@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 import os
-from fastq_helpers import quality_trim
+from famli.fastq_helpers import quality_trim
 
 os.mkdir("/usr/famli/tests/quality_trim")
 

@@ -4,8 +4,8 @@ MAINTAINER sminot@fredhutch.org
 # Install prerequisites
 RUN apt update && \
 	apt-get install -y build-essential wget unzip python2.7 \
-					   python-dev git python-pip bats awscli curl \
-					   libcurl4-openssl-dev make gcc zlib1g-dev
+					   python-dev git python-pip bats awscli \
+					   libcurl4-openssl-dev make gcc zlib1g-dev curl 
 
 # Set the default langage to C
 ENV LC_ALL C
@@ -14,19 +14,13 @@ ENV LC_ALL C
 RUN mkdir /share
 WORKDIR /share
 
-# Add files
+# Folder for installation
 RUN mkdir /usr/famli
-ADD requirements.txt /usr/famli
-
-# Install python requirements
-RUN pip install -r /usr/famli/requirements.txt && rm /usr/famli/requirements.txt
-
 
 # Install DIAMOND v0.9.10
-RUN cd /usr/famli && \
+RUN cd /usr/local/bin && \
 	wget -q https://github.com/bbuchfink/diamond/releases/download/v0.9.10/diamond-linux64.tar.gz && \
 	tar xzf diamond-linux64.tar.gz && \
-	mv diamond /usr/bin/ && \
 	rm diamond-linux64.tar.gz
 
 
@@ -46,14 +40,12 @@ RUN cd /usr/local/bin && \
 	mv bin/* ./
 
 
-# Add the run script to the PATH
-ADD famli.py /usr/famli
-ADD famli /usr/famli/famli
-RUN cd /usr/famli && \
-	ln -s /usr/famli/famli.py /usr/bin/
-ENV PYTHONPATH="/usr/famli:${PYTHONPATH}"
+# Install FAMLI
+ADD . /usr/famli
+RUN pip install --upgrade pip && \
+	pip install /usr/famli && \
+	chmod -R a+x /usr/local/lib/python2.7/dist-packages/famli/
 
 
 # Run tests and then remove the folder
-ADD tests /usr/famli/tests
 RUN bats /usr/famli/tests/ && rm -r /usr/famli/tests/
