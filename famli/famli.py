@@ -32,16 +32,19 @@ class FAMLI:
 
         parser.add_argument("command", help="""Command to run: align or filter. Invoke
             famli.py <command> -h for further details""")
-        args = parser.parse_args(sys.argv[1:2])
-
-        # Run the command that was specified
-        if args.command == "align":
-            self.align()
-        elif args.command == "filter":
-            self.filter()
-        else:
+        if len(sys.argv) < 2:
             parser.print_help()
-            print("Unrecognized command")
+        else:
+            args = parser.parse_args(sys.argv[1:2])
+
+            # Run the command that was specified
+            if args.command == "align":
+                self.align()
+            elif args.command == "filter":
+                self.filter()
+            else:
+                parser.print_help()
+                print("Unrecognized command")
 
     def align(self):
         """Align a set of reads with DIAMOND and run FAMLI."""
