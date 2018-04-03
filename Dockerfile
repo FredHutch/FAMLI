@@ -4,8 +4,8 @@ MAINTAINER sminot@fredhutch.org
 # Install prerequisites
 RUN apt update && \
 	apt-get install -y build-essential wget unzip python2.7 \
-					   python-dev git python-pip bats awscli curl \
-					   libcurl4-openssl-dev make gcc zlib1g-dev
+					   python-dev git python-pip bats awscli \
+					   libcurl4-openssl-dev make gcc zlib1g-dev curl 
 
 # Set the default langage to C
 ENV LC_ALL C

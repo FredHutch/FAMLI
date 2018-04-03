@@ -6,9 +6,9 @@
 }
 
 
-@test "AWS CLI v1.11.146" {
+@test "AWS CLI" {
   v="$(aws --version 2>&1)"
-  [[ "$v" =~ "1.11.146" ]]
+  [[ "$v" =~ "aws-cli" ]]
 }
 
 
