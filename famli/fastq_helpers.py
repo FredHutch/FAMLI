@@ -10,7 +10,7 @@ import logging
 import subprocess
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from Bio.SeqIO.FastaIO import SimpleFastaParser
-from famli.exec_helpers import run_cmds
+from .exec_helpers import run_cmds
 
 
 def combine_fastqs(fps_in, fp_out):

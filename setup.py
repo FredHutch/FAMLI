@@ -17,7 +17,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='famli',
-    version='1.0',
+    version='0.9',
     description='Functional Analysis of Metagenomes by Likelihood Inferrence',
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -43,5 +43,10 @@ setup(
     project_urls={  # Optional
         'Bug Reports': 'https://github.com/fredhutch/famli/issues',
         'Source': 'https://github.com/fredhutch/famli/',
+    },
+    entry_points={
+        'console_scripts': [
+            'famli = famli.famli:main',
+        ],
     },
 )

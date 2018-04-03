@@ -10,15 +10,15 @@ import json
 import shutil
 import logging
 import argparse
-from famli.exec_helpers import align_reads
-from famli.exec_helpers import return_results
-from famli.exec_helpers import exit_and_clean_up
-from famli.exec_helpers import get_reference_database
-from famli.fastq_helpers import get_reads_from_url
-from famli.fastq_helpers import set_up_sra_cache_folder
-from famli.fastq_helpers import count_fastq_reads
-from famli.fastq_helpers import combine_fastqs
-from famli.famli_helpers import parse_alignment
+from .exec_helpers import align_reads
+from .exec_helpers import return_results
+from .exec_helpers import exit_and_clean_up
+from .exec_helpers import get_reference_database
+from .fastq_helpers import get_reads_from_url
+from .fastq_helpers import set_up_sra_cache_folder
+from .fastq_helpers import count_fastq_reads
+from .fastq_helpers import combine_fastqs
+from .famli_helpers import parse_alignment
 
 
 class FAMLI:
@@ -372,6 +372,11 @@ class FAMLI:
 
         elapsed = round(time.time() - start_time, 2)
         logging.info("Time elapsed: {:,}".format(elapsed))
+
+
+def main():
+    """Entrypoint for main script."""
+    FAMLI()
 
 
 if __name__ == "__main__":
