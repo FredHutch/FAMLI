@@ -39,6 +39,7 @@ setup(
         "scipy>=0.19.1",
         "awscli>=1.11.146",
         "boto3>=1.4.7",
+        "python-dateutil==2.6.0"
     ],
     project_urls={  # Optional
         'Bug Reports': 'https://github.com/fredhutch/famli/issues',
@@ -46,7 +47,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'famli = famli.famli:main',
+            'famli = famli.run_famli:main',
         ],
     },
 )
