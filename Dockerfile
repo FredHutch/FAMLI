@@ -43,8 +43,7 @@ RUN cd /usr/local/bin && \
 # Install FAMLI
 ADD . /usr/famli
 RUN pip install --upgrade pip && \
-	pip install /usr/famli && \
-	chmod -R a+x /usr/local/lib/python2.7/dist-packages/famli/
+	pip install /usr/famli
 
 
 # Run tests and then remove the folder
