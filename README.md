@@ -21,9 +21,11 @@ it can be appropriate to assign them to the lowest common ancestor (LCA) of both
 However in the case of mapping short reads to a database of protein sequences (or peptides) we can not
 assume that there is an underlying directed acyclic graph structure (e.g. a taxonomy). Peptides
 can evolve by duplication events, homologous recombination, and other means of sharing highly conserved
-domains (leading to shared short reads). If one simply includes all peptides for which there is a read, we find the false positives outnumber the true positive by as much as 1000:1. 
+domains (leading to shared short reads). If one simply includes all peptides for which there is a read,
+we find the false positives outnumber the true positive by as much as 1000:1. 
 
-We developed a method to iteratively assign shared reads to the most likely true peptides, bringing the precision (TP / (TP+FP)) to close to 90%. To do so, we used the following principles:
+We developed a method to iteratively assign shared reads to the most likely true peptides, bringing the 
+precision (TP / (TP+FP)) to close to 90%. To do so, we used the following principles:
 
 
   1. In peptides that are truly positive in the sample, there should be relatively even sequence 
@@ -126,12 +128,13 @@ DIAMOND [https://github.com/bbuchfink/diamond]. We specifically ran DIAMOND with
 --id 80
 ```
 
-**Alignment score**: We use bitscores as calculated by DIAMOND as an integrated assessment of alignment quality (considering alignment length, gaps, mismatches, and query sequence quality).
+**Alignment score**: We use bitscores as calculated by DIAMOND as an integrated assessment of alignment quality 
+(considering alignment length, gaps, mismatches, and query sequence quality).
 
 
 ### Wrapper Script
 
-The entire process can be run as a single command with the script `famli.py`. That script encompasses:
+The entire process can be run as a single command with the script `famli`. That script encompasses:
 
   1. Downloading a reference database (if needed)
   2. Downloading the input data from SRA, AWS S3, or FTP (if needed)
@@ -141,23 +144,23 @@ The entire process can be run as a single command with the script `famli.py`. Th
   6. Computing coverage & depth metrics for each reference
   7. Writing the output as a single JSON file, either locally or to AWS S3
 
-The script `famil.py` can run two commands: `filter` and `align`. 
+The script `famil` can run two commands: `filter` and `align`. 
 
 #### `filter`
 
 `filter` runs the core algorithm of FAMLI, processing a set of BLASTX-like alignments (in tabular format), 
 filtering out unlikely proteins, and assigning multi-mapped reads to individual references. 
 
-The options available when invoking `famli.py filter` are as follows:
+The options available when invoking `famli filter` are as follows:
 
 ```
-usage: famli.py [-h] [--input INPUT] [--output OUTPUT] [--threads THREADS]
-                [--logfile LOGFILE] [--qseqid-ix QSEQID_IX]
-                [--sseqid-ix SSEQID_IX] [--qstart-ix QSTART_IX]
-                [--qend-ix QEND_IX] [--sstart-ix SSTART_IX]
-                [--send-ix SEND_IX] [--bitscore-ix BITSCORE_IX]
-                [--slen-ix SLEN_IX] [--sd-mean-cutoff SD_MEAN_CUTOFF]
-                [--strim-5 STRIM_5] [--strim-3 STRIM_3]
+usage: famli [-h] [--input INPUT] [--output OUTPUT] [--threads THREADS]
+             [--logfile LOGFILE] [--qseqid-ix QSEQID_IX]
+             [--sseqid-ix SSEQID_IX] [--qstart-ix QSTART_IX]
+             [--qend-ix QEND_IX] [--sstart-ix SSTART_IX]
+             [--send-ix SEND_IX] [--bitscore-ix BITSCORE_IX]
+             [--slen-ix SLEN_IX] [--sd-mean-cutoff SD_MEAN_CUTOFF]
+             [--strim-5 STRIM_5] [--strim-3 STRIM_3]
 
 Filter a set of existing alignments in tabular format with FAMLI
 
@@ -200,14 +203,14 @@ optional arguments:
 reference database using DIAMOND, processing the alignments, filtering out unlikely proteins,
 and assigning multi-mapped reads to individual references. 
 
-The options available when invoking `famli.py align` are as follows:
+The options available when invoking `famli align` are as follows:
 
 ```
-usage: famli.py [-h] --input INPUT --sample-name SAMPLE_NAME --ref-db REF_DB
-                --output-folder OUTPUT_FOLDER [--min-score MIN_SCORE]
-                [--blocks BLOCKS] [--query-gencode QUERY_GENCODE]
-                [--threads THREADS] [--min-qual MIN_QUAL]
-                [--temp-folder TEMP_FOLDER]
+usage: famli [-h] --input INPUT --sample-name SAMPLE_NAME --ref-db REF_DB
+              --output-folder OUTPUT_FOLDER [--min-score MIN_SCORE]
+              [--blocks BLOCKS] [--query-gencode QUERY_GENCODE]
+              [--threads THREADS] [--min-qual MIN_QUAL]
+              [--temp-folder TEMP_FOLDER]
 
 Align a set of reads with DIAMOND, filter alignments with FAMLI, and return
 the results
@@ -236,16 +239,23 @@ optional arguments:
                         Folder used for temporary files.
 ```
 
+#### Installation
+
+The software can be installed with the command `pip install famli`. If you choose to install
+FAMLI in this way, you will also need to install a working copy of the DIAMOND aligner,
+accessible at runtime via `diamond`. That is the only dependency not installed by `pip install famli`.
+FAMLI has not been tested with Python3  -- it is only advisable to run it with Python2. 
+
 #### Docker
 
-Example invocation of `famli.py` inside of the docker image for this repo (`famli:latest`):
+Example invocation of `famli` inside of the docker image for this repo (`famli:latest`):
 
 ```
 docker run \
   -v $PWD/tests:/share \
   --rm \
   famli:latest \
-    famli.py \
+    famli \
     align \
       --input /share/example.fastq \
       --sample-name example \
