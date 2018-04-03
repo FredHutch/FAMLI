@@ -25,7 +25,7 @@ setup(
     author='Samuel Minot',
     author_email='sminot@fredhutch.org',
     classifiers=[
-        'Intended Audience :: Scientists',
+        'Intended Audience :: Science/Research',
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7',
