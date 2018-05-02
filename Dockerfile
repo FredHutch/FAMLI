@@ -14,6 +14,9 @@ ENV LC_ALL C
 RUN mkdir /share
 WORKDIR /share
 
+# Add /scratch
+RUN mkdir /scratch
+
 # Folder for installation
 RUN mkdir /usr/famli
 
