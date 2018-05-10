@@ -43,10 +43,9 @@ RUN cd /usr/local/bin && \
 	mv bin/* ./
 
 
-# Install FAMLI
-ADD . /usr/famli
+# Install FAMLI from PyPI
 RUN pip install --upgrade pip && \
-	pip install /usr/famli
+	pip install famli==1.0
 
 
 # Run tests and then remove the folder
