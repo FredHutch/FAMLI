@@ -44,9 +44,9 @@ RUN cd /usr/local/bin && \
 
 
 # Install FAMLI from PyPI
-RUN pip install --upgrade pip && \
-	pip install famli==1.0
+RUN pip install famli==1.0
 
 
 # Run tests and then remove the folder
+ADD . /usr/famli
 RUN bats /usr/famli/tests/ && rm -r /usr/famli/tests/
