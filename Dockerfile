@@ -44,7 +44,7 @@ RUN cd /usr/local/bin && \
 
 
 # Install FAMLI from PyPI
-RUN pip install famli==1.0
+RUN pip install famli==1.0 bucket_command_wrapper==0.3.0
 
 
 # Run tests and then remove the folder
