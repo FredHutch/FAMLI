@@ -137,6 +137,10 @@ def get_reference_database(ref_db, temp_folder):
 
 def return_results(out, read_prefix, output_folder, temp_folder):
     """Write out the final results as a JSON object."""
+    # Make sure the output folder ends with a trailing slash
+    if output_folder[-1] != "/":
+        output_folder += "/"
+
     # Make a temporary file
     temp_fp = os.path.join(temp_folder, read_prefix + '.json')
     with open(temp_fp, 'wt') as fo:
