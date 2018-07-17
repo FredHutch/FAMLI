@@ -22,7 +22,7 @@ RUN mkdir /usr/famli
 
 # Install DIAMOND v0.9.10
 RUN cd /usr/local/bin && \
-	wget -q https://github.com/bbuchfink/diamond/releases/download/v0.9.10/diamond-linux64.tar.gz && \
+	wget -q https://github.com/bbuchfink/diamond/releases/download/v0.9.22/diamond-linux64.tar.gz && \
 	tar xzf diamond-linux64.tar.gz && \
 	rm diamond-linux64.tar.gz
 

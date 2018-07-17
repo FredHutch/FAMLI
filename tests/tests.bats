@@ -17,9 +17,9 @@
   [[ "$v" =~ "7.47.0" ]]
 }
 
-@test "DIAMOND v0.9.10" {
+@test "DIAMOND v0.9.22" {
   v="$(diamond --version)"
-  [[ "$v" =~ "0.9.10" ]]
+  [[ "$v" =~ "0.9.22" ]]
 }
 
 @test "Make sure the run script is in the PATH" {
