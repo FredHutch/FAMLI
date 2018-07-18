@@ -47,6 +47,10 @@ RUN cd /usr/local/bin && \
 RUN pip install famli==1.0 bucket_command_wrapper==0.3.0
 
 
-# Run tests and then remove the folder
+# Add the local directory to the container
 ADD . /usr/famli
+# Add the taxonomic analysis script to the PATH
+RUN ln -s /usr/famli/diamond-tax.py /usr/local/bin/
+
+# Run tests and then remove the folder
 RUN bats /usr/famli/tests/ && rm -r /usr/famli/tests/
