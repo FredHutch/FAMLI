@@ -217,7 +217,7 @@ def diamond_tax(
                 'AES256',
                 file_to_upload,
                 output_folder])
-            os.unlink(temp_fp)
+            os.unlink(file_to_upload)
         else:
             # Copy to local folder
             run_cmds(['mv', file_to_upload, output_folder])
