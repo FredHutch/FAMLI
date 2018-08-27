@@ -103,6 +103,10 @@ class FAMLI:
         parser.add_argument("--batchsize",
                             type=int,
                             help="""Number of reads to process at a time.""")
+        parser.add_argument("--delete-all-files-in-temp-folder",
+                            type=str,
+                            default="False",
+                            help="""If True, DELETE ALL OF THE FILES IN THE TEMP FOLDER before starting.""")
 
         args = parser.parse_args(sys.argv[2:])
 
@@ -132,6 +136,15 @@ class FAMLI:
         consoleHandler = logging.StreamHandler()
         consoleHandler.setFormatter(logFormatter)
         rootLogger.addHandler(consoleHandler)
+
+        # Delete the files in scratch, if specified
+        if bool(args.delete_all_files_in_temp_folder):
+            logging.info("Deleting all files in temp folder " + args.temp_folder)
+            for fp in os.listdir(args.temp_folder):
+                fp = os.path.join(args.temp_folder, fp)
+                logging.info("Deleting " + fp)
+                shutil.rmtree(fp)
+            logging.info("Done deleting files in temporary folder")
 
         # Check to see if DIAMOND is available
         logging.info("Checking for a working copy of DIAMOND")
