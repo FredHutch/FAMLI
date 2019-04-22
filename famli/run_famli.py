@@ -284,7 +284,7 @@ class FAMLI:
 
         parser.add_argument("--input",
                             type=str,
-                            help="Location for input alignement file.")
+                            help="Location for input alignment file.")
         parser.add_argument("--output",
                             type=str,
                             help="Location for output JSON file.")
