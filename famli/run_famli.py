@@ -104,9 +104,8 @@ class FAMLI:
                             type=int,
                             help="""Number of reads to process at a time.""")
         parser.add_argument("--delete-all-files-in-temp-folder",
-                            type=str,
-                            default="False",
-                            help="""If True, DELETE ALL OF THE FILES IN THE TEMP FOLDER before starting.""")
+                            action="store_true",
+                            help="""If flag is set, DELETE ALL OF THE FILES IN THE TEMP FOLDER before starting.""")
 
         args = parser.parse_args(sys.argv[2:])
 
@@ -138,7 +137,7 @@ class FAMLI:
         rootLogger.addHandler(consoleHandler)
 
         # Delete the files in scratch, if specified
-        if bool(args.delete_all_files_in_temp_folder):
+        if args.delete_all_files_in_temp_folder:
             logging.info("Deleting all files in temp folder " + args.temp_folder)
             for fp in os.listdir(args.temp_folder):
                 fp = os.path.join(args.temp_folder, fp)
