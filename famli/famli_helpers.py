@@ -353,6 +353,53 @@ def calc_cov_by_subject(alignments, subject_len):
     return coverages, index
 
 
+def filter_alignment(
+    input_fp, 
+    output_fp, 
+    alignments,
+    QSEQID_i=0,
+    SSEQID_i=1,
+):
+    """Filter the input to just those alignments which pass the filter."""
+    
+    # Make a dict with the subject that passes filter for each query
+    best_subject = {
+        query: subject
+        for query, subject, sstart, send, bitscore in alignments
+    }
+
+    # Open the input file handle
+    if input_fp.endswith(".gz"):
+        fi = gzip.open(input_fp, "rt")
+    else:
+        fi = open(input_fp, "rt")
+
+    # Open the output file handle
+    if output_fp.endswith(".gz"):
+        fo = gzip.open(output_fp, "wt")
+    else:
+        fo = open(output_fp, "wt")
+
+    written_counter = 0
+    for i, line in enumerate(fi):
+        if i % 1000000 == 0 and i > 0:
+            logging.info("{:,} lines of alignment parsed".format(i))
+        line_list = line.rstrip("\n").split("\t")
+
+        # Check to see if this is an alignment which passed filtering
+        if best_subject.get(line_list[QSEQID_i]) is not None and best_subject[line_list[QSEQID_i]] == line_list[SSEQID_i]:
+            fo.write(line)
+            written_counter += 1
+            if written_counter % 1000000 == 0 and written_counter > 0:
+                logging.info("{:,} lines of filtered alignment written".format(written_counter))
+    
+    fi.close()
+    fo.close()
+
+    logging.info("{:,} lines of alignment parsed".format(i))
+    logging.info("{:,} lines of filtered alignment written".format(written_counter))
+
+
 def parse_alignment(align_handle,
                     batchsize=None,   # Number of reads to process at a time
                     QSEQID_i=0,

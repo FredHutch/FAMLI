@@ -116,4 +116,29 @@ assert n_dedup == 359, n_dedup
 # Three references survived filtering
 assert len(output) == 3
 
+# RETURNING FILTERED ALIGNMENTS
+p = subprocess.Popen([
+    "famli",
+    "filter",
+    "--input",
+    "/usr/famli/tests/example.diamond.aln",
+    "--output", "/usr/famli/tests/example4.json",
+    "--output-aln", "/usr/famli/tests/example4.aln"
+])
+stdout, stderr = p.communicate()
+exitcode = p.wait()
+
+assert exitcode == 0
+
+output = json.load(open("/usr/famli/tests/example4.json", "rt"))
+n_dedup = sum([d["nreads"] for d in output])
+
+output_aln = open("/usr/famli/tests/example4.aln", "rt").readlines()
+
+# The alignment TSV only contains deduplicated reads
+assert n_dedup == len(output_aln), n_dedup
+
+# The number of aligned references matches in the JSON and ALN
+assert len(output) == len(set([l.split("\t")[1] for l in output_aln]))
+
 print("PASSED TESTS")

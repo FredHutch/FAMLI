@@ -20,6 +20,7 @@ from famli.fastq_helpers import set_up_sra_cache_folder
 from famli.fastq_helpers import count_fastq_reads
 from famli.fastq_helpers import combine_fastqs
 from famli.famli_helpers import parse_alignment
+from famli.famli_helpers import filter_alignment
 
 
 class FAMLI:
@@ -211,7 +212,7 @@ class FAMLI:
         # Process the alignments, reassigning multi-mapped reads
         try:
             with open(align_fp, "rt") as align_handle:
-                aligned_reads, abund = parse_alignment(
+                aligned_reads, abund, alignments = parse_alignment(
                     align_handle,
                     batchsize=args.batchsize,
                 )
@@ -287,6 +288,10 @@ class FAMLI:
         parser.add_argument("--output",
                             type=str,
                             help="Location for output JSON file.")
+        parser.add_argument("--output-aln",
+                            default=None,
+                            type=str,
+                            help="Location for output alignment file.")
         parser.add_argument("--threads",
                             type=int,
                             help="""Number of processors to use.""",
@@ -369,7 +374,7 @@ class FAMLI:
         else:
             f = open(args.input, "rt")
 
-        aligned_reads, output = parse_alignment(
+        aligned_reads, output, alignments = parse_alignment(
             f,
             QSEQID_i=args.qseqid_ix,
             SSEQID_i=args.sseqid_ix,
@@ -389,6 +394,15 @@ class FAMLI:
         if args.output:
             with open(args.output, "wt") as fo:
                 json.dump(output, fo, indent=4)
+
+        if args.output_aln is not None:
+            filter_alignment(
+                args.input,
+                args.output_aln,
+                alignments,
+                QSEQID_i=args.qseqid_ix,
+                SSEQID_i=args.sseqid_ix
+            )
 
         elapsed = round(time.time() - start_time, 2)
         logging.info("Time elapsed: {:,}".format(elapsed))
