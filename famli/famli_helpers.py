@@ -380,6 +380,9 @@ def parse_alignment(align_handle,
     # Keep a list of the final, filtered alignments
     final_alignments = []
 
+    # Keep track of the total number of reads with any alignments
+    total_aligned_reads = 0
+
     # Iterate over blocks of alignments
     for alignments in parser.yield_alignments(
         align_handle,
@@ -398,6 +401,7 @@ def parse_alignment(align_handle,
         # Count the total number of reads that were aligned
         logging.info("Counting unique queries")
         aligned_reads = len(set([a[0] for a in alignments]))
+        total_aligned_reads += aligned_reads
 
         logging.info("Number of unique queries: {:,}".format(aligned_reads))
         logging.info("Number of alignments: {:,}".format(len(alignments)))
@@ -571,4 +575,4 @@ def parse_alignment(align_handle,
         len(output),
     ))
 
-    return aligned_reads, output
+    return total_aligned_reads, output, alignments
