@@ -154,7 +154,8 @@ filtering out unlikely proteins, and assigning multi-mapped reads to individual 
 The options available when invoking `famli filter` are as follows:
 
 ```
-usage: famli [-h] [--input INPUT] [--output OUTPUT] [--threads THREADS]
+usage: famli [-h] [--input INPUT] [--output OUTPUT] 
+             [--threads THREADS] [--output-aln OUTPUT_ALN]
              [--logfile LOGFILE] [--qseqid-ix QSEQID_IX]
              [--sseqid-ix SSEQID_IX] [--qstart-ix QSTART_IX]
              [--qend-ix QEND_IX] [--sstart-ix SSTART_IX]
@@ -168,6 +169,8 @@ optional arguments:
   -h, --help            show this help message and exit
   --input INPUT         Location for input alignement file.
   --output OUTPUT       Location for output JSON file.
+  --output-aln OUTPUT_ALN
+                        Location for output filtered alignment file.
   --threads THREADS     Number of processors to use.
   --logfile LOGFILE     (Optional) Write log to this file.
   --qseqid-ix QSEQID_IX

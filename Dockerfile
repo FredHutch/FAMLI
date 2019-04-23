@@ -42,13 +42,12 @@ RUN cd /usr/local/bin && \
 	rm fastx_toolkit_0.0.13_binaries_Linux_2.6_amd64.tar.bz2 && \
 	mv bin/* ./
 
-
 # Install FAMLI from PyPI
-RUN pip install famli==1.0 bucket_command_wrapper==0.3.0
-
+RUN pip install famli==1.1 bucket_command_wrapper==0.3.0
 
 # Add the local directory to the container
 ADD . /usr/famli
+
 # Add the taxonomic analysis script to the PATH
 RUN ln -s /usr/famli/diamond-tax.py /usr/local/bin/
 
