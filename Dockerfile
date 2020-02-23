@@ -1,7 +1,8 @@
-FROM ubuntu:16.04
+FROM ubuntu:18.04
 MAINTAINER sminot@fredhutch.org
 
 # Install prerequisites
+ARG DEBIAN_FRONTEND=noninteractive
 RUN apt update && \
 	apt-get install -y build-essential wget unzip python2.7 \
 					   python-dev git python-pip bats awscli \

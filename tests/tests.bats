@@ -12,9 +12,9 @@
 }
 
 
-@test "Curl v7.47.0" {
+@test "Curl v7.58.0" {
   v="$(curl --version)"
-  [[ "$v" =~ "7.47.0" ]]
+  [[ "$v" =~ "7.58.0" ]]
 }
 
 @test "DIAMOND v0.9.22" {
