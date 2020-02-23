@@ -348,7 +348,7 @@ def calc_cov_by_subject(alignments, subject_len):
         # Add to the cov_proc
         coverages[a[1]][a[2]:a[3]] += 1
 
-    index[last_subject] = (last_start_ix, ix)
+    index[last_subject] = (last_start_ix, ix + 1)
 
     return coverages, index
 
