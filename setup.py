@@ -8,9 +8,6 @@ from os import path
 
 here = path.abspath(path.dirname(__file__))
 
-# Set the long description
-long_description = open('README.md').read()
-
 # Arguments marked as "Required" below must be included for upload to PyPI.
 # Fields marked as "Optional" may be commented out.
 
@@ -18,7 +15,7 @@ setup(
     name='famli',
     version='1.2',
     description='Functional Analysis of Metagenomes by Likelihood Inferrence',
-    long_description=long_description,
+    long_description="See https://github.com/FredHutch/FAMLI for details",
     long_description_content_type='text/markdown',
     url='https://github.com/FredHutch/FAMLI',
     author='Samuel Minot',
