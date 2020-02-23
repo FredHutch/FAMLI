@@ -13,7 +13,7 @@ Authors:
 
 The goal of this work is to improve the accuracy of identifying protein-coding sequences
 from short-read shotgun metagenomic sequencing data. The core challenge we consider here
-is that of 'multi-mapping' reads – short nucleotide sequences that are equally similar to
+is that of 'multi-mapping' reads -- short nucleotide sequences that are equally similar to
 multiple different reference protein sequences. In other domains such multi-mapping reads can
 be dealt with in a variety of ways. For example, in the realm of taxonomic identification
 it can be appropriate to assign them to the lowest common ancestor (LCA) of both references. 
