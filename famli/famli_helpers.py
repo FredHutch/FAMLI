@@ -281,7 +281,6 @@ class FAMLI_Reassignment:
             # Skip queries with only a single possible subject
             if len(aln_prob) == 1:
                 newly_unique_queries.add(query)
-                self.n_unique += 1
                 continue
             # Figure out our maximum score for this query
             max_likely = max(list(aln_prob.values()))
