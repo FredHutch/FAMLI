@@ -12,7 +12,7 @@ assert isinstance(alignments, list)
 n_dedup = sum([d["nreads"] for d in output])
 
 assert n_reads == 360, n_reads
-assert n_dedup == 359, n_dedup
+assert n_dedup == 360, n_dedup
 
 # Three references survived filtering
 assert len(output) == 3
