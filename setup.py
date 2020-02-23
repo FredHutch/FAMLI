@@ -18,24 +18,10 @@ Authors:
   * Samuel Minot, Ph.D.
   * Jonathan Golob, M.D., Ph.D.
 
-### Introduction
-
 The goal of this work is to improve the accuracy of identifying protein-coding sequences
 from short-read shotgun metagenomic sequencing data. The core challenge we consider here
 is that of 'multi-mapping' reads – short nucleotide sequences that are equally similar to
-multiple different reference protein sequences. In other domains such multi-mapping reads can
-be dealt with in a variety of ways. For example, in the realm of taxonomic identification
-it can be appropriate to assign them to the lowest common ancestor (LCA) of both references. 
-
-However in the case of mapping short reads to a database of protein sequences (or peptides) we can not
-assume that there is an underlying directed acyclic graph structure (e.g. a taxonomy). Peptides
-can evolve by duplication events, homologous recombination, and other means of sharing highly conserved
-domains (leading to shared short reads). If one simply includes all peptides for which there is a read,
-we find the false positives outnumber the true positive by as much as 1000:1. 
-
-We developed a method to iteratively assign shared reads to the most likely true peptides, bringing the 
-precision (TP / (TP+FP)) to close to 90%. To do so, we used the following principles:
-
+multiple different reference protein sequences.
 """
 
 # Arguments marked as "Required" below must be included for upload to PyPI.
