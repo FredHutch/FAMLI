@@ -9,20 +9,7 @@ from os import path
 here = path.abspath(path.dirname(__file__))
 
 # Set the long description
-long_description = """
-# FAMLI
-Functional Analysis of Metagenomes by Likelihood Inference
-
-Authors: 
-
-  * Samuel Minot, Ph.D.
-  * Jonathan Golob, M.D., Ph.D.
-
-The goal of this work is to improve the accuracy of identifying protein-coding sequences
-from short-read shotgun metagenomic sequencing data. The core challenge we consider here
-is that of 'multi-mapping' reads – short nucleotide sequences that are equally similar to
-multiple different reference protein sequences.
-"""
+long_description = open('README.md').read()
 
 # Arguments marked as "Required" below must be included for upload to PyPI.
 # Fields marked as "Optional" may be commented out.
