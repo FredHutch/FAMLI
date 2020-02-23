@@ -44,7 +44,7 @@ RUN cd /usr/local/bin && \
 	mv bin/* ./
 
 # Install FAMLI from PyPI
-RUN pip install famli==1.1 bucket_command_wrapper==0.3.0
+RUN pip install famli==1.2 bucket_command_wrapper==0.3.0
 
 # Add the local directory to the container
 ADD . /usr/famli
