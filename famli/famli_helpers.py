@@ -545,6 +545,10 @@ def parse_alignment(align_handle,
     alignments = final_alignments
     queries_after_reassignment = len(alignments)
 
+    # Sort alignments by subject
+    logging.info("Sorting {:,} alignments by subject".format(len(alignments)))
+    alignments.sort(key=lambda a: a[1])
+
     # Cull the subjects that were removed during FILTER 2
     all_subjects = set([a[1] for a in alignments])
     parser.subject_len = {
