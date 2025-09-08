@@ -2,8 +2,6 @@
 
 # Always prefer setuptools over distutils
 from setuptools import setup, find_packages
-# To use a consistent encoding
-from codecs import open
 from os import path
 
 here = path.abspath(path.dirname(__file__))
@@ -13,7 +11,7 @@ here = path.abspath(path.dirname(__file__))
 
 setup(
     name='famli',
-    version='1.2',
+    version='1.2.2',
     description='Functional Analysis of Metagenomes by Likelihood Inferrence',
     long_description="See https://github.com/FredHutch/FAMLI for details",
     long_description_content_type='text/markdown',
@@ -35,7 +33,7 @@ setup(
         "scipy>=0.19.1",
         "awscli>=1.11.146",
         "boto3>=1.4.7",
-        "python-dateutil==2.6.0"
+        "python-dateutil>=2.6.0"
     ],
     project_urls={  # Optional
         'Bug Reports': 'https://github.com/fredhutch/famli/issues',
@@ -45,5 +43,5 @@ setup(
         'console_scripts': [
             'famli = famli.run_famli:main',
         ],
-    },
+    }
 )

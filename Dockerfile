@@ -1,15 +1,16 @@
-FROM ubuntu:18.04
-MAINTAINER sminot@fredhutch.org
+FROM ubuntu:24.04
+LABEL MAINTAINER=sminot@fredhutch.org
 
 # Install prerequisites
 ARG DEBIAN_FRONTEND=noninteractive
-RUN apt update && \
-	apt-get install -y build-essential wget unzip python2.7 \
-					   python-dev git python-pip bats awscli \
-					   libcurl4-openssl-dev make gcc zlib1g-dev curl 
+RUN apt-get update && \
+	apt-get install -y build-essential wget unzip python3.12 \
+					   python3-dev git python3-pip bats \
+					   python3.12-venv \
+					   libcurl4-openssl-dev make gcc zlib1g-dev curl
 
-# Set the default langage to C
-ENV LC_ALL C
+# Set the default language to C
+ENV LC_ALL=C
 
 # Use /share as the working directory
 RUN mkdir /share
@@ -43,8 +44,16 @@ RUN cd /usr/local/bin && \
 	rm fastx_toolkit_0.0.13_binaries_Linux_2.6_amd64.tar.bz2 && \
 	mv bin/* ./
 
+# Make a virtual environment for Python 3.12
+RUN python3.12 -m venv /usr/envs/famli
+RUN /bin/bash -c "source /usr/envs/famli/bin/activate"
+ENV PATH="/usr/envs/famli/bin:$PATH"
+
+# Install UV
+RUN pip install uv
+
 # Install FAMLI from PyPI
-RUN pip install famli==1.2 bucket_command_wrapper==0.3.0
+RUN uv pip install famli==1.2.2
 
 # Add the local directory to the container
 ADD . /usr/famli
