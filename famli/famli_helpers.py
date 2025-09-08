@@ -539,7 +539,7 @@ def parse_alignment(align_handle,
     if len(final_alignments) == 0:
         logging.info("The entire sample contains zero alignments")
         # Return some empty data
-        return 0, []
+        return 0, [], []
 
     # Change the name, for brevity
     alignments = final_alignments
